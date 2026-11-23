@@ -22,7 +22,7 @@ class _ContinuousReaderState extends _ComicReaderState {
       for (final page in _pages)
         page.hasDimensions
             ? Size(page.width.toDouble(), page.height.toDouble())
-            : null
+            : null,
     ];
     _positions.itemPositions.addListener(_queuePositionReport);
   }
@@ -46,30 +46,48 @@ class _ContinuousReaderState extends _ComicReaderState {
 
   @override
   int _visiblePage() {
-    final positions = _positions.itemPositions.value
-        .where((p) =>
-            p.index < widget.chapter.images.length &&
-            p.itemTrailingEdge > 0 &&
-            p.itemLeadingEdge < 1)
-        .toList()
-      ..sort((a, b) => a.index.compareTo(b.index));
+    final positions =
+        _positions.itemPositions.value
+            .where(
+              (p) =>
+                  p.index < widget.chapter.images.length &&
+                  p.itemTrailingEdge > 0 &&
+                  p.itemLeadingEdge < 1,
+            )
+            .toList()
+          ..sort((a, b) => a.index.compareTo(b.index));
     final viewport = _viewportKey.currentContext?.findRenderObject();
     if (viewport is RenderBox && viewport.hasSize) {
       final bounds = viewport.localToGlobal(Offset.zero) & viewport.size;
+      var largestArea = 0.0;
+      int? largestPage;
       for (final position in positions) {
         final context = _pageContexts[position.index];
         if (context == null || !context.mounted) continue;
         final box = context.findRenderObject();
         if (box is! RenderBox || !box.hasSize || !box.attached) continue;
         final rect = MatrixUtils.transformRect(
-            box.getTransformTo(null), Offset.zero & box.size);
-        if (rect.intersect(bounds).width > .5 &&
-            rect.intersect(bounds).height > .5) {
-          return position.index;
+          box.getTransformTo(null),
+          Offset.zero & box.size,
+        );
+        final visible = rect.intersect(bounds);
+        final area = visible.width > 0 && visible.height > 0
+            ? visible.width * visible.height
+            : 0.0;
+        if (area > largestArea ||
+            (area == largestArea && position.index == _current)) {
+          largestArea = area;
+          largestPage = position.index;
         }
       }
+      if (largestPage != null) return largestPage;
     }
-    return positions.isEmpty ? _current : positions.first.index;
+    if (positions.isEmpty) return _current;
+    positions.sort(
+      (a, b) => (min(b.itemTrailingEdge, 1) - max(b.itemLeadingEdge, 0))
+          .compareTo(min(a.itemTrailingEdge, 1) - max(a.itemLeadingEdge, 0)),
+    );
+    return positions.first.index;
   }
 
   @override
@@ -77,9 +95,10 @@ class _ContinuousReaderState extends _ComicReaderState {
     if (!_scroll.isAttached) return;
     if (animation) {
       await _scroll.scrollTo(
-          index: page,
-          duration: const Duration(milliseconds: 260),
-          curve: Curves.easeOutCubic);
+        index: page,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
     } else {
       _scroll.jumpTo(index: page);
       await WidgetsBinding.instance.endOfFrame;
@@ -88,47 +107,52 @@ class _ContinuousReaderState extends _ComicReaderState {
   }
 
   @override
-  Widget _buildViewer() => LayoutBuilder(builder: (context, constraints) {
-        final size = constraints.biggest;
-        final list = zoomable.ZoomablePositionedList.builder(
-          key: ValueKey('continuous-${widget.chapter.id}'),
-          enableZoom: _zoomEnabled,
-          enableDoubleTapZoom: _zoomEnabled && !_doubleTapFullscreen,
-          minScale: 1,
-          maxScale: 4,
-          doubleTapScale: 2,
-          dragRegionLock: true,
-          doubleTapAnimationDuration: currentNoAnimation()
-              ? Duration.zero
-              : const Duration(milliseconds: 200),
-          initialScrollIndex: _current,
-          itemScrollController: _scroll,
-          itemPositionsListener: _positions,
-          scrollDirection: _vertical ? Axis.vertical : Axis.horizontal,
-          reverse: widget.readerDirection == ReaderDirection.rightToLeft,
-          minCacheExtent: 0,
-          physics: const ClampingScrollPhysics(),
-          itemCount: widget.chapter.images.length + 1,
-          itemBuilder: (context, index) {
-            if (index == widget.chapter.images.length) {
-              return SizedBox(
-                  width: _vertical ? size.width : 180, child: _buildNextEp());
-            }
-            final source = _sizes[index];
-            final ratio = source == null
-                ? (_vertical ? 2.0 : .5)
-                : source.width / source.height;
-            final extent = _vertical
-                ? Size(size.width, size.width / ratio)
-                : Size(size.height * ratio, size.height);
-            final page = _pageAt(index);
-            return Builder(builder: (pageContext) {
+  Widget _buildViewer() => LayoutBuilder(
+    builder: (context, constraints) {
+      final size = constraints.biggest;
+      final list = zoomable.ZoomablePositionedList.builder(
+        key: ValueKey('continuous-${widget.chapter.id}'),
+        enableZoom: _zoomEnabled,
+        enableDoubleTapZoom: _zoomEnabled && !_doubleTapFullscreen,
+        minScale: 1,
+        maxScale: 4,
+        doubleTapScale: 2,
+        dragRegionLock: true,
+        doubleTapAnimationDuration: currentNoAnimation()
+            ? Duration.zero
+            : const Duration(milliseconds: 200),
+        initialScrollIndex: _current,
+        itemScrollController: _scroll,
+        itemPositionsListener: _positions,
+        scrollDirection: _vertical ? Axis.vertical : Axis.horizontal,
+        reverse: widget.readerDirection == ReaderDirection.rightToLeft,
+        cacheExtent: 0,
+        physics: const ClampingScrollPhysics(),
+        itemCount: widget.chapter.images.length + 1,
+        itemBuilder: (context, index) {
+          if (index == widget.chapter.images.length) {
+            return SizedBox(
+              width: _vertical ? size.width : 180,
+              child: _buildNextEp(),
+            );
+          }
+          final source = _sizes[index];
+          final ratio = source == null
+              ? size.width / size.height
+              : source.width / source.height;
+          final extent = _vertical
+              ? Size(size.width, size.width / ratio)
+              : Size(size.height * ratio, size.height);
+          final page = _pageAt(index);
+          return Builder(
+            builder: (pageContext) {
               _pageContexts[index] = pageContext;
               return JMPageImage(
                 widget.chapter.id,
                 page.name,
                 key: ValueKey('reader-page-${widget.chapter.id}-$index'),
                 pageIndex: page.sourceIndex,
+                provider: _readerPageProvider(index),
                 localPath: page.localAvailable ? page.localPath : null,
                 localOnly: page.localPath != null,
                 preserveSourceAspectRatio: true,
@@ -148,30 +172,36 @@ class _ContinuousReaderState extends _ComicReaderState {
                   _queuePositionReport();
                 },
               );
-            });
-          },
-        );
-        return SizedBox.expand(
-          key: _viewportKey,
-          child: Listener(
-            onPointerDown: (_) => _cancelJump(),
-            onPointerMove: (_) => _queuePositionReport(),
-            onPointerUp: (_) {
-              _settledTimer?.cancel();
-              _settledTimer = Timer(
-                  const Duration(milliseconds: 240), _queuePositionReport);
             },
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTapUp: _handlesSingleTap
-                  ? (details) => _handleTap(details, size)
-                  : null,
-              onDoubleTap: _doubleTapFullscreen ? _toggleFullscreen : null,
-              child: list,
-            ),
+          );
+        },
+      );
+      return SizedBox.expand(
+        key: _viewportKey,
+        child: Listener(
+          onPointerDown: (_) => _cancelJump(),
+          onPointerSignal: (_) => _cancelJump(),
+          onPointerPanZoomStart: (_) => _cancelJump(),
+          onPointerMove: (_) => _queuePositionReport(),
+          onPointerUp: (_) {
+            _settledTimer?.cancel();
+            _settledTimer = Timer(
+              const Duration(milliseconds: 240),
+              _queuePositionReport,
+            );
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTapUp: _handlesSingleTap
+                ? (details) => _handleTap(details, size)
+                : null,
+            onDoubleTap: _doubleTapFullscreen ? _toggleFullscreen : null,
+            child: list,
           ),
-        );
-      });
+        ),
+      );
+    },
+  );
 }
 
 /// One lazy PhotoView gallery owns zoom/pan and page gestures for both single
@@ -185,8 +215,9 @@ class _PagedReaderState extends _ComicReaderState {
   @override
   void initState() {
     super.initState();
-    _pageController =
-        PageController(initialPage: _current ~/ (_paired ? 2 : 1));
+    _pageController = PageController(
+      initialPage: _current ~/ (_paired ? 2 : 1),
+    );
   }
 
   @override
@@ -200,19 +231,22 @@ class _PagedReaderState extends _ComicReaderState {
 
   @override
   int _visiblePage() => _normalizePage(
-      ((_pageController.hasClients ? _pageController.page : null) ??
-                  _current / (_paired ? 2 : 1))
-              .round() *
-          (_paired ? 2 : 1));
+    ((_pageController.hasClients ? _pageController.page : null) ??
+                _current / (_paired ? 2 : 1))
+            .round() *
+        (_paired ? 2 : 1),
+  );
 
   @override
   Future<void> _moveTo(int page, bool animation) async {
     if (!_pageController.hasClients) return;
     final slot = page ~/ (_paired ? 2 : 1);
     if (animation) {
-      await _pageController.animateToPage(slot,
-          duration: const Duration(milliseconds: 260),
-          curve: Curves.easeOutCubic);
+      await _pageController.animateToPage(
+        slot,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
     } else {
       _pageController.jumpToPage(slot);
       await WidgetsBinding.instance.endOfFrame;
@@ -232,98 +266,117 @@ class _PagedReaderState extends _ComicReaderState {
   }
 
   Widget _image(int index) => Image(
-        key: ValueKey(
-            'reader-page-${widget.chapter.id}-$index-${_reloadVersions[index] ?? 0}'),
-        image: _readerPageProvider(index),
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stack) => LayoutBuilder(
-          builder: (context, constraints) => buildError(
-              context, constraints.maxWidth, constraints.maxHeight,
-              onReload: () =>
-                  unawaited(_reloadImage(index).catchError((_) {}))),
-        ),
-      );
+    key: ValueKey(
+      'reader-page-${widget.chapter.id}-$index-${_reloadVersions[index] ?? 0}',
+    ),
+    image: _readerPageProvider(index),
+    fit: BoxFit.contain,
+    errorBuilder: (context, error, stack) => LayoutBuilder(
+      builder: (context, constraints) => buildError(
+        context,
+        constraints.maxWidth,
+        constraints.maxHeight,
+        onReload: () => unawaited(_reloadImage(index).catchError((_) {})),
+      ),
+    ),
+  );
 
   @override
-  Widget _buildViewer() => LayoutBuilder(builder: (context, constraints) {
-        final size = constraints.biggest;
-        final pairs = buildPagePairs(widget.chapter.images.length,
-            cover: false,
-            rtl: currentTwoPageDirection == TwoPageDirection.rightToLeft);
-        return Listener(
-            onPointerDown: (_) => _cancelJump(),
-            child: Stack(children: [
-              PhotoViewGallery.builder(
-                pageController: _pageController,
-                itemCount:
-                    _paired ? pairs.length : widget.chapter.images.length,
-                scrollDirection:
-                    widget.readerDirection == ReaderDirection.topToBottom
-                        ? Axis.vertical
-                        : Axis.horizontal,
-                reverse: widget.readerDirection == ReaderDirection.rightToLeft,
-                backgroundDecoration: const BoxDecoration(color: Colors.black),
-                scrollPhysics: const ClampingScrollPhysics(),
-                onPageChanged: (slot) {
-                  _onCurrentChange(slot * (_paired ? 2 : 1));
-                  for (final entry in _zoomControllers.entries) {
-                    if (entry.key != slot) {
-                      entry.value.scale = 1;
-                      entry.value.position = Offset.zero;
-                    }
+  Widget _buildViewer() => LayoutBuilder(
+    builder: (context, constraints) {
+      final size = constraints.biggest;
+      final pairs = buildPagePairs(
+        widget.chapter.images.length,
+        cover: false,
+        rtl: currentTwoPageDirection == TwoPageDirection.rightToLeft,
+      );
+      return Listener(
+        onPointerDown: (_) => _cancelJump(),
+        onPointerSignal: (_) => _cancelJump(),
+        onPointerPanZoomStart: (_) => _cancelJump(),
+        child: Stack(
+          children: [
+            PhotoViewGallery.builder(
+              pageController: _pageController,
+              itemCount: _paired ? pairs.length : widget.chapter.images.length,
+              scrollDirection:
+                  widget.readerDirection == ReaderDirection.topToBottom
+                  ? Axis.vertical
+                  : Axis.horizontal,
+              reverse: widget.readerDirection == ReaderDirection.rightToLeft,
+              backgroundDecoration: const BoxDecoration(color: Colors.black),
+              scrollPhysics: const ClampingScrollPhysics(),
+              onPageChanged: (slot) {
+                _onCurrentChange(slot * (_paired ? 2 : 1));
+                for (final entry in _zoomControllers.entries) {
+                  if (entry.key != slot) {
+                    entry.value.scale = 1;
+                    entry.value.position = Offset.zero;
                   }
-                },
-                builder: (context, slot) {
-                  final controller = _zoomControllers.putIfAbsent(
-                      slot, () => PhotoViewController(initialScale: 1));
-                  final pair = _paired ? pairs[slot] : null;
-                  final child = pair == null
-                      ? _image(slot)
-                      : Row(children: [
+                }
+              },
+              builder: (context, slot) {
+                final controller = _zoomControllers.putIfAbsent(
+                  slot,
+                  () => PhotoViewController(initialScale: 1),
+                );
+                final pair = _paired ? pairs[slot] : null;
+                final child = pair == null
+                    ? _image(slot)
+                    : Row(
+                        children: [
                           Expanded(
-                              child: pair.left == null
-                                  ? const SizedBox.shrink()
-                                  : _image(pair.left!)),
+                            child: pair.left == null
+                                ? const SizedBox.shrink()
+                                : _image(pair.left!),
+                          ),
                           Expanded(
-                              child: pair.right == null
-                                  ? const SizedBox.shrink()
-                                  : _image(pair.right!)),
-                        ]);
-                  return PhotoViewGalleryPageOptions.customChild(
-                    child: SizedBox.fromSize(size: size, child: child),
-                    childSize: size,
-                    minScale: 1.0,
-                    initialScale: 1.0,
-                    maxScale: 4.0,
-                    controller: controller,
-                    onTapUp: _handlesSingleTap
-                        ? (_, details, __) => _handleTap(details, size)
-                        : null,
-                    scaleStateCycle: (state) {
-                      // Leave PhotoView in charge of pinch/pan. This only defines the
-                      // double-tap action, including fullscreen control modes.
-                      scheduleMicrotask(() {
-                        if (!mounted) return;
-                        if (_doubleTapFullscreen) {
-                          _toggleFullscreen();
-                        } else {
-                          controller.scale =
-                              (controller.scale ?? 1) > 1.01 ? 1 : 2;
-                          controller.position = Offset.zero;
-                        }
-                      });
-                      return state;
-                    },
-                  );
-                },
+                            child: pair.right == null
+                                ? const SizedBox.shrink()
+                                : _image(pair.right!),
+                          ),
+                        ],
+                      );
+                return PhotoViewGalleryPageOptions.customChild(
+                  child: SizedBox.fromSize(size: size, child: child),
+                  childSize: size,
+                  minScale: 1.0,
+                  initialScale: 1.0,
+                  maxScale: 4.0,
+                  controller: controller,
+                  onTapUp: _handlesSingleTap
+                      ? (_, details, __) => _handleTap(details, size)
+                      : null,
+                  scaleStateCycle: (state) {
+                    // Leave PhotoView in charge of pinch/pan. This only defines the
+                    // double-tap action, including fullscreen control modes.
+                    scheduleMicrotask(() {
+                      if (!mounted) return;
+                      if (_doubleTapFullscreen) {
+                        _toggleFullscreen();
+                      } else {
+                        controller.scale = (controller.scale ?? 1) > 1.01
+                            ? 1
+                            : 2;
+                        controller.position = Offset.zero;
+                      }
+                    });
+                    return state;
+                  },
+                );
+              },
+            ),
+            if (_current >=
+                (_paired
+                    ? (widget.chapter.images.length - 1) ~/ 2 * 2
+                    : widget.chapter.images.length - 1))
+              Align(
+                alignment: Alignment.bottomRight,
+                child: SizedBox(width: 150, child: _buildNextEp()),
               ),
-              if (_current >=
-                  (_paired
-                      ? (widget.chapter.images.length - 1) ~/ 2 * 2
-                      : widget.chapter.images.length - 1))
-                Align(
-                    alignment: Alignment.bottomRight,
-                    child: SizedBox(width: 150, child: _buildNextEp())),
-            ]));
-      });
+          ],
+        ),
+      );
+    },
+  );
 }

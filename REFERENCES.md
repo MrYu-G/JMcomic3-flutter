@@ -19,7 +19,7 @@
 - 项目：[hect0x7/JMComic-Crawler-Python](https://github.com/hect0x7/JMComic-Crawler-Python)。
 - 参考范围：`jm_config.py`、`jm_client_impl.py` 中的移动端 API 协议、版本与时间戳、
   请求签名、请求头、登录表单及域名候选/回退处理。
-- 对应实现：独立 [Rust 后端](https://github.com/MrYu-JMComic/jmcomic3-rust-backend)
+- 对应实现：独立 [Rust 后端](https://github.com/MrYu-G/jmcomic3-rust-backend)
   中的 API 请求与响应适配；Flutter 通过 MethodChannel / C ABI 调用该后端。
 - 本应用不包含 Python 解释器，也不将该项目列为运行时依赖。这里标注协议参考来源。
 - 上游 [MIT 许可证](https://github.com/hect0x7/JMComic-Crawler-Python/blob/master/LICENSE)

@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/file_actions.dart';
+import 'package:jmcomic3/screens/components/dialogs.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 import 'package:photo_view/photo_view.dart';
 

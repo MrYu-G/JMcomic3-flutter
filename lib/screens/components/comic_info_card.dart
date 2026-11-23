@@ -1,6 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import 'package:jmcomic3/basic/entities.dart';
 import 'package:jmcomic3/screens/comic_search_screen.dart';
 

@@ -1,105 +1,94 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 
-import '../basic/commons.dart';
+import 'package:jmcomic3/screens/components/file_actions.dart';
+import 'package:jmcomic3/screens/components/dialogs.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import '../basic/methods.dart';
 import 'is_pro.dart';
 
-late String _currentDownloadAndExportTo;
+String _currentDownloadAndExportTo = '';
 
 Future<String?> initDownloadAndExportTo() async {
   _currentDownloadAndExportTo = await methods.getDownloadAndExportTo();
   return null;
 }
 
-String currentDownloadAndExportToName() {
-  return _currentDownloadAndExportTo == ""
-      ? "Not set"
-      : _currentDownloadAndExportTo;
-}
+String currentDownloadAndExportToName() => _currentDownloadAndExportTo.isEmpty
+    ? 'Not set'
+    : _currentDownloadAndExportTo;
 
 String get currentDownloadAndExportTo => _currentDownloadAndExportTo;
 
-Widget downloadAndExportToSetting() {
+Future<void> chooseDownloadDirectory(BuildContext context) async {
+  final l10n = context.l10n;
   if (!hasProAccess) {
-    return Builder(
-      builder: (context) {
-        final l10n = context.l10n;
-        return SwitchListTile(
-          title: Text(
-            l10n.tr("下载时同时导出", en: "Export while downloading"),
-            style: const TextStyle(color: Colors.grey),
-          ),
-          subtitle: Text(
-            l10n.tr("发电才能使用", en: "Pro required"),
-            style: const TextStyle(color: Colors.grey),
-          ),
-          value: false,
-          onChanged: (_) {},
-        );
-      },
+    defaultToast(
+      context,
+      l10n.tr(
+        '自定义下载目录需要 Pro 权限',
+        en: 'A custom download directory requires Pro access',
+      ),
     );
+    return;
   }
-  if (Platform.isIOS) {
-    return StatefulBuilder(
-      builder: (BuildContext context, void Function(void Function()) setState) {
-        final l10n = context.l10n;
-        return SwitchListTile(
-          title: Text(l10n.tr("下载时同时导出", en: "Export while downloading")),
-          subtitle: Text(_currentDownloadAndExportTo),
-          value: _currentDownloadAndExportTo.isNotEmpty,
-          onChanged: (e) async {
-            var root =
-                e ? ((await methods.iosGetDocumentDir()) + "/exports") : "";
-            await methods.setDownloadAndExportTo(root);
-            _currentDownloadAndExportTo = root;
-            setState(() {});
-          },
-        );
-      },
-    );
-  }
-  return StatefulBuilder(
-    builder: (BuildContext context, void Function(void Function()) setState) {
-      final l10n = context.l10n;
-      return ListTile(
-        title: Text(
-          l10n.tr("下载的同时导出到某个目录(填完整路径)",
-              en: "Export to a directory while downloading (full path)"),
-        ),
-        subtitle: Text(
-          _currentDownloadAndExportTo.isEmpty
-              ? l10n.tr("未设置", en: "Not set")
-              : _currentDownloadAndExportTo,
-        ),
-        onTap: () async {
-          final chooseNewLocation = l10n.tr("选择新位置", en: "Choose new location");
-          final clearSetting = l10n.tr("清除设置", en: "Clear setting");
-          var result = await chooseListDialog(context,
-              values: [chooseNewLocation, clearSetting],
-              title: l10n.tr("下载的时候同时导出", en: "Export while downloading"));
-          if (result != null) {
-            if (chooseNewLocation == result) {
-              if (!await androidMangeStorageRequest()) {
-                throw Exception(l10n.tr("申请权限被拒绝", en: "Permission denied"));
-              }
-              String? root = await chooseFolder(context);
-              if (root != null) {
-                await methods.setDownloadAndExportTo(root);
-                _currentDownloadAndExportTo = root;
-                setState(() {});
-              }
-            } else if (clearSetting == result) {
-              const root = "";
-              await methods.setDownloadAndExportTo(root);
-              _currentDownloadAndExportTo = root;
-              setState(() {});
-            }
-          }
-        },
-      );
-    },
+  final chooseNewLocation = l10n.tr('选择新位置', en: 'Choose new location');
+  final useDefault = l10n.tr('使用默认目录', en: 'Use default directory');
+  final choice = await chooseListDialog(
+    context,
+    values: [chooseNewLocation, useDefault],
+    title: l10n.tr('新下载的保存目录', en: 'Directory for new downloads'),
   );
+  if (choice == null || !context.mounted) return;
+  try {
+    String? path;
+    if (choice == useDefault) {
+      path = '';
+    } else {
+      if (!await androidMangeStorageRequest()) {
+        if (context.mounted) {
+          defaultToast(
+            context,
+            l10n.tr('文件访问权限被拒绝', en: 'File access was denied'),
+          );
+        }
+        return;
+      }
+      if (!context.mounted) return;
+      path = await chooseFolder(context);
+    }
+    if (path == null || !context.mounted) return;
+    // Retain the existing property so historical preferences remain compatible.
+    await methods.setDownloadAndExportTo(path);
+    _currentDownloadAndExportTo = path;
+  } catch (error) {
+    if (context.mounted) {
+      defaultToast(
+        context,
+        l10n.tr('设置目录失败：$error', en: 'Could not set directory: $error'),
+      );
+    }
+  }
 }
+
+Widget downloadAndExportToSetting() => StatefulBuilder(
+  builder: (context, setState) => ListTile(
+    leading: const Icon(Icons.folder_outlined),
+    title: Text(context.l10n.tr('下载目录', en: 'Download directory')),
+    subtitle: Text(
+      [
+        _currentDownloadAndExportTo.isEmpty
+            ? context.l10n.tr('使用默认目录', en: 'Using the default directory')
+            : _currentDownloadAndExportTo,
+        context.l10n.tr(
+          '仅影响新下载，现有下载保留原位置。',
+          en: 'Applies to new downloads. Existing downloads keep their location.',
+        ),
+      ].join('\n'),
+    ),
+    onTap: () async {
+      await chooseDownloadDirectory(context);
+      if (context.mounted) setState(() {});
+    },
+  ),
+);

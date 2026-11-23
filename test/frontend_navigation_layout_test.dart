@@ -12,12 +12,20 @@ import 'package:jmcomic3/basic/entities.dart';
 import 'package:jmcomic3/basic/methods.dart' as native;
 import 'package:jmcomic3/configs/categories_sort.dart';
 import 'package:jmcomic3/configs/login.dart' as login_config;
+import 'package:jmcomic3/configs/no_animation.dart';
 import 'package:jmcomic3/configs/pager_column_number.dart';
 import 'package:jmcomic3/configs/pager_controller_mode.dart';
 import 'package:jmcomic3/configs/pager_cover_rate.dart';
 import 'package:jmcomic3/configs/pager_view_mode.dart';
+import 'package:jmcomic3/configs/proxy.dart';
 import 'package:jmcomic3/configs/theme.dart';
+import 'package:jmcomic3/configs/two_page_direction.dart';
 import 'package:jmcomic3/configs/versions.dart';
+import 'package:jmcomic3/configs/volume_key_control.dart';
+import 'package:jmcomic3/configs/web_dav_password.dart';
+import 'package:jmcomic3/configs/web_dav_sync_switch.dart';
+import 'package:jmcomic3/configs/web_dav_url.dart';
+import 'package:jmcomic3/configs/web_dav_username.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 import 'package:jmcomic3/screens/app_screen.dart';
 import 'package:jmcomic3/screens/browser_screen.dart';
@@ -25,8 +33,9 @@ import 'package:jmcomic3/screens/comic_search_screen.dart';
 import 'package:jmcomic3/screens/components/comic_floating_search_bar.dart';
 import 'package:jmcomic3/screens/components/comic_pager.dart';
 import 'package:jmcomic3/screens/components/comic_list.dart';
-import 'package:jmcomic3/screens/components/images.dart';
+import 'package:jmcomic3/screens/settings_screen.dart';
 import 'package:jmcomic3/screens/user_screen.dart';
+import 'package:jmcomic3/basic/page_image_provider.dart';
 
 const _channel = MethodChannel('methods');
 const _previewKey = ValueKey('layout-preview');
@@ -85,6 +94,7 @@ class _Fixture {
         };
         break;
       case 'logout':
+      case 'get_proxy':
         response = '';
         break;
       case 'categories':
@@ -105,7 +115,7 @@ class _Fixture {
           'blocks': [
             {
               'title': 'Topics',
-              'content': ['Adventure', 'Nature']
+              'content': ['Adventure', 'Nature'],
             },
           ],
         };
@@ -118,9 +128,11 @@ class _Fixture {
           response = {
             'total': browseTotal,
             'content': [
-              for (var index = start;
-                  index < start + browseBatchSize && index < browseTotal!;
-                  index++)
+              for (
+                var index = start;
+                index < start + browseBatchSize && index < browseTotal!;
+                index++
+              )
                 {
                   'id': 8000 + index,
                   'name': 'Browse result $index',
@@ -185,9 +197,14 @@ class _Fixture {
       final canvas = Canvas(recorder);
       final base = Colors.primaries[index * 2 + 1];
       canvas.drawRect(
-          const Rect.fromLTWH(0, 0, 240, 320), Paint()..color = base.shade200);
-      canvas.drawCircle(const Offset(177, 72), 35,
-          Paint()..color = Colors.white.withValues(alpha: .72));
+        const Rect.fromLTWH(0, 0, 240, 320),
+        Paint()..color = base.shade200,
+      );
+      canvas.drawCircle(
+        const Offset(177, 72),
+        35,
+        Paint()..color = Colors.white.withValues(alpha: .72),
+      );
       final hills = Path()
         ..moveTo(0, 215)
         ..quadraticBezierTo(80, 95, 170, 235)
@@ -196,8 +213,10 @@ class _Fixture {
         ..lineTo(0, 320)
         ..close();
       canvas.drawPath(hills, Paint()..color = base.shade700);
-      canvas.drawRect(const Rect.fromLTWH(20, 282, 118, 4),
-          Paint()..color = Colors.white.withValues(alpha: .7));
+      canvas.drawRect(
+        const Rect.fromLTWH(20, 282, 118, 4),
+        Paint()..color = Colors.white.withValues(alpha: .7),
+      );
       final picture = recorder.endRecording();
       final bitmap = await picture.toImage(240, 320);
       final bytes = await bitmap.toByteData(format: ui.ImageByteFormat.png);
@@ -211,30 +230,30 @@ class _Fixture {
 }
 
 Widget _host(Widget child, {double textScale = 1}) => MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: _saveScreenshots
-          ? lightTheme.copyWith(
-              textTheme:
-                  lightTheme.textTheme.apply(fontFamily: 'LayoutPreview'),
-              primaryTextTheme: lightTheme.primaryTextTheme
-                  .apply(fontFamily: 'LayoutPreview'),
-            )
-          : lightTheme,
-      locale: const Locale('en'),
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context)
-            .copyWith(textScaler: TextScaler.linear(textScale)),
-        child: RepaintBoundary(key: _previewKey, child: child!),
-      ),
-      home: child,
-    );
+  debugShowCheckedModeBanner: false,
+  theme: _saveScreenshots
+      ? lightTheme.copyWith(
+          textTheme: lightTheme.textTheme.apply(fontFamily: 'LayoutPreview'),
+          primaryTextTheme: lightTheme.primaryTextTheme.apply(
+            fontFamily: 'LayoutPreview',
+          ),
+        )
+      : lightTheme,
+  locale: const Locale('en'),
+  localizationsDelegates: const [
+    AppLocalizations.delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+    GlobalCupertinoLocalizations.delegate,
+  ],
+  supportedLocales: AppLocalizations.supportedLocales,
+  builder: (context, child) => MediaQuery(
+    data: MediaQuery.of(context)
+        .copyWith(textScaler: TextScaler.linear(textScale)),
+    child: RepaintBoundary(key: _previewKey, child: child!),
+  ),
+  home: child,
+);
 
 Future<_Fixture> _prepare(
   WidgetTester tester, {
@@ -281,22 +300,24 @@ Future<_Fixture> _prepare(
         }
       }
       final config = jsonDecode(
-          await File('.dart_tool/package_config.json').readAsString()) as Map;
+        await File('.dart_tool/package_config.json').readAsString(),
+      ) as Map;
       final sdk = Uri.parse(config['flutterRoot'] as String).toFilePath();
       final icons = File(
-          '$sdk/bin/cache/artifacts/material_fonts/materialicons-regular.otf');
+        '$sdk/bin/cache/artifacts/material_fonts/materialicons-regular.otf',
+      );
       if (await icons.exists()) {
-        await (FontLoader('MaterialIcons')
-              ..addFont(Future.value(
-                  ByteData.sublistView(await icons.readAsBytes()))))
+        await (FontLoader('MaterialIcons')..addFont(
+              Future.value(ByteData.sublistView(await icons.readAsBytes())),
+            ))
             .load();
       }
       await fixture.createPreviewCovers();
     });
   }
-  await tester.pumpWidget(_host(const Scaffold(
-    body: SizedBox(key: ValueKey('login-context')),
-  )));
+  await tester.pumpWidget(
+    _host(const Scaffold(body: SizedBox(key: ValueKey('login-context')))),
+  );
   await login_config.initLogin(
     tester.element(find.byKey(const ValueKey('login-context'))),
   );
@@ -330,17 +351,24 @@ Future<void> _capture(WidgetTester tester, String name) async {
 }
 
 void main() {
-  testWidgets('browse stream fills an initially unscrollable wide viewport',
-      (tester) async {
-    final fixture = await _prepare(tester,
-        size: const Size(1600, 1800), mode: PagerControllerMode.stream);
+  testWidgets('browse stream fills an initially unscrollable wide viewport', (
+    tester,
+  ) async {
+    final fixture = await _prepare(
+      tester,
+      size: const Size(1600, 1800),
+      mode: PagerControllerMode.stream,
+    );
     fixture.browseTotal = 8;
     await tester.pumpWidget(_host(const AppScreen()));
     await tester.pumpAndSettle();
     // No drag is performed: the first two covers fit within one visible row.
     // Layout completion must fetch the remaining batches in order by itself.
-    final pages = fixture.calls('comics').map(
-        (request) => (jsonDecode(request['params'] as String) as Map)['page']);
+    final pages = fixture
+        .calls('comics')
+        .map(
+          (request) => (jsonDecode(request['params'] as String) as Map)['page'],
+        );
     expect(pages, [1, 2, 3, 4]);
     final comics = tester.widget<ComicList>(find.byType(ComicList)).data;
     expect(comics, hasLength(8));
@@ -348,8 +376,9 @@ void main() {
     expect(find.text('Loaded 4 / 4 pages'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('rail breakpoint preserves active page and category state',
-      (tester) async {
+  testWidgets('rail breakpoint preserves active page and category state', (
+    tester,
+  ) async {
     final fixture = await _prepare(tester, size: const Size(839, 700));
     await tester.pumpWidget(_host(const AppScreen()));
     await tester.pumpAndSettle();
@@ -360,12 +389,16 @@ void main() {
     await tester.tap(find.widgetWithText(Tab, 'Beta'));
     await tester.pumpAndSettle();
     final browserState = tester.state(find.byType(BrowserScreen));
-    expect(fixture.calls('comics').last['params'],
-        jsonEncode({'categories_slug': 'beta', 'sort_by': '', 'page': 1}));
-    await tester.tap(find.descendant(
-      of: find.byType(NavigationBar),
-      matching: find.byIcon(Icons.image_outlined),
-    ));
+    expect(
+      fixture.calls('comics').last['params'],
+      jsonEncode({'categories_slug': 'beta', 'sort_by': '', 'page': 1}),
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.byIcon(Icons.image_outlined),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
@@ -379,35 +412,42 @@ void main() {
       if (width >= 840) {
         expect(find.byType(NavigationBar), findsNothing);
         expect(
-            tester
-                .widget<NavigationRail>(find.byType(NavigationRail))
-                .selectedIndex,
-            1);
+          tester
+              .widget<NavigationRail>(find.byType(NavigationRail))
+              .selectedIndex,
+          1,
+        );
       } else {
         expect(find.byType(NavigationRail), findsNothing);
         expect(
-            tester
-                .widget<NavigationBar>(find.byType(NavigationBar))
-                .selectedIndex,
-            1);
+          tester
+              .widget<NavigationBar>(find.byType(NavigationBar))
+              .selectedIndex,
+          1,
+        );
       }
       expect(tester.state(find.byType(UserScreen)), same(libraryState));
-      expect(tester.state(find.byType(BrowserScreen, skipOffstage: false)),
-          same(browserState));
+      expect(
+        tester.state(find.byType(BrowserScreen, skipOffstage: false)),
+        same(browserState),
+      );
       expect(tester.takeException(), isNull);
     }
-    await tester.tap(find.descendant(
-      of: find.byType(NavigationBar),
-      matching: find.byIcon(Icons.menu_book_outlined),
-    ));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.byIcon(Icons.menu_book_outlined),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 1);
     expect(tester.state(find.byType(BrowserScreen)), same(browserState));
     expect(fixture.calls('categories'), hasLength(1));
   });
 
-  testWidgets('category sort and reorder retain the selected slug',
-      (tester) async {
+  testWidgets('category sort and reorder retain the selected slug', (
+    tester,
+  ) async {
     final fixture = await _prepare(tester);
     await tester.pumpWidget(_host(const AppScreen()));
     await tester.pumpAndSettle();
@@ -417,25 +457,32 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Newest'));
     await tester.pumpAndSettle();
-    expect(fixture.calls('comics').last['params'],
-        jsonEncode({'categories_slug': 'beta', 'sort_by': 'mr', 'page': 1}));
+    expect(
+      fixture.calls('comics').last['params'],
+      jsonEncode({'categories_slug': 'beta', 'sort_by': 'mr', 'page': 1}),
+    );
 
     await saveCategoriesSort([2, 1, 3]);
     await tester.pumpAndSettle();
     expect(tester.widget<ChoiceChip>(_chip('Beta')).selected, isTrue);
     expect(tester.widget<ChoiceChip>(_chip('Alpha')).selected, isFalse);
-    expect(tester.getTopLeft(_chip('Beta')).dx,
-        lessThan(tester.getTopLeft(_chip('Alpha')).dx));
+    expect(
+      tester.getTopLeft(_chip('Beta')).dx,
+      lessThan(tester.getTopLeft(_chip('Alpha')).dx),
+    );
     await tester.tap(_chip('Alpha'));
     await tester.pumpAndSettle();
-    expect(fixture.calls('comics').last['params'],
-        jsonEncode({'categories_slug': 'alpha', 'sort_by': 'mr', 'page': 1}));
+    expect(
+      fixture.calls('comics').last['params'],
+      jsonEncode({'categories_slug': 'alpha', 'sort_by': 'mr', 'page': 1}),
+    );
     expect(tester.takeException(), isNull);
     await _capture(tester, 'browse-desktop');
   });
 
-  testWidgets('visible search loads history and opens a query result',
-      (tester) async {
+  testWidgets('visible search loads history and opens a query result', (
+    tester,
+  ) async {
     final fixture = await _prepare(tester);
     await tester.pumpWidget(_host(const AppScreen()));
     await tester.pumpAndSettle();
@@ -454,13 +501,16 @@ void main() {
     await tester.tap(find.text('quiet forest'));
     await tester.pumpAndSettle();
     expect(find.byType(ComicSearchScreen), findsOneWidget);
-    expect(fixture.calls('comic_search').single['params'],
-        jsonEncode({'search_query': 'quiet forest', 'sort_by': '', 'page': 1}));
+    expect(
+      fixture.calls('comic_search').single['params'],
+      jsonEncode({'search_query': 'quiet forest', 'sort_by': '', 'page': 1}),
+    );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('mobile search tags do not add a second keyboard inset',
-      (tester) async {
+  testWidgets('mobile search tags do not add a second keyboard inset', (
+    tester,
+  ) async {
     await _prepare(tester, size: const Size(320, 640));
     await tester.pumpWidget(_host(const AppScreen(), textScale: 1.4));
     await tester.pumpAndSettle();
@@ -475,17 +525,17 @@ void main() {
     addTearDown(tester.view.resetViewInsets);
     await tester.pumpAndSettle();
 
-    final panel = tester.widget<ListView>(find.ancestor(
-      of: history,
-      matching: find.byType(ListView),
-    ));
+    final panel = tester.widget<ListView>(
+      find.ancestor(of: history, matching: find.byType(ListView)),
+    );
     expect(panel.padding, const EdgeInsets.all(10));
     expect(tester.getRect(history).right, lessThanOrEqualTo(308));
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('compact browse and guest library fit large text',
-      (tester) async {
+  testWidgets('compact browse and guest library fit large text', (
+    tester,
+  ) async {
     await _prepare(tester, size: const Size(320, 780));
     await tester.pumpWidget(_host(const AppScreen(), textScale: 2));
     await tester.pumpAndSettle();
@@ -501,10 +551,12 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     await _capture(tester, 'browse-compact-large-text');
-    await tester.tap(find.descendant(
-      of: find.byType(NavigationBar),
-      matching: find.byIcon(Icons.image_outlined),
-    ));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.byIcon(Icons.image_outlined),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Guest Mode'), findsOneWidget);
     final user = find.byType(UserScreen);
@@ -514,8 +566,9 @@ void main() {
     );
     // The compact account card now uses its own inset. Validate against the
     // actual card bounds rather than the previous card's fixed text offset.
-    final accountCard =
-        tester.getRect(find.byKey(const ValueKey('profile-account-card')));
+    final accountCard = tester.getRect(
+      find.byKey(const ValueKey('profile-account-card')),
+    );
     final guestTitle = tester.getRect(find.text('Guest Mode'));
     expect(guestTitle.left, greaterThan(accountCard.left));
     expect(guestTitle.right, lessThan(accountCard.right));
@@ -528,8 +581,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('signed-out library stays usable at 320px and desktop',
-      (tester) async {
+  testWidgets('signed-out library stays usable at 320px and desktop', (
+    tester,
+  ) async {
     await _prepare(tester, size: const Size(320, 780), guest: false);
     await tester.pumpWidget(_host(const UserScreen(), textScale: 2));
     await tester.pumpAndSettle();
@@ -545,8 +599,10 @@ void main() {
     expect(account.right, lessThan(library.left));
     final view = find.descendant(
       of: find.byType(UserScreen),
-      matching: find.byWidgetPredicate((widget) =>
-          widget is ConstrainedBox && widget.constraints.maxWidth == 1120),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is ConstrainedBox && widget.constraints.maxWidth == 1120,
+      ),
     );
     expect(tester.getSize(view).width, 1120);
     expect(tester.takeException(), isNull);
@@ -554,48 +610,127 @@ void main() {
   });
 
   for (final columns in [3, 4]) {
-    testWidgets('phone browse restores compact tabs and $columns saved columns',
-        (tester) async {
-      final fixture = await _prepare(tester, size: const Size(390, 780));
-      fixture.properties['pager_column_number'] = '$columns';
-      await initPagerColumnCount();
-      await tester.pumpWidget(_host(const AppScreen()));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'phone browse restores compact tabs and $columns saved columns',
+      (tester) async {
+        final fixture = await _prepare(tester, size: const Size(390, 780));
+        fixture.properties['pager_column_number'] = '$columns';
+        await initPagerColumnCount();
+        await tester.pumpWidget(_host(const AppScreen()));
+        await tester.pumpAndSettle();
 
-      expect(find.text(_searchHint), findsNothing);
-      final gridFinder = find.byType(GridView).first;
-      final grid = tester.widget<GridView>(gridFinder);
-      final delegate =
-          grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
-      expect(delegate.crossAxisCount, columns);
-      expect(delegate.mainAxisSpacing, 0);
-      expect(delegate.crossAxisSpacing, 0);
-      expect(grid.padding, const EdgeInsets.all(10));
-      expect(
-        tester.getTopLeft(find.byType(ComicPager).first).dy -
-            tester.getTopLeft(find.byType(BrowserScreen)).dy,
-        lessThanOrEqualTo(kToolbarHeight + 56),
-      );
-      await tester.tap(find.widgetWithText(Tab, 'Beta'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.sort));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Newest'));
-      await tester.pumpAndSettle();
-      await saveCategoriesSort([2, 1, 3]);
-      await tester.pumpAndSettle();
-      final tabs = tester.widget<TabBar>(find.byType(TabBar));
-      expect(tabs.controller!.index, 0);
-      expect((tabs.tabs.first as Tab).text, 'Beta');
-      expect(fixture.calls('comics').last['params'],
-          jsonEncode({'categories_slug': 'beta', 'sort_by': 'mr', 'page': 1}));
-      expect(tester.takeException(), isNull);
-      await _capture(tester, 'browse-mobile-restored-$columns-columns');
-    });
+        expect(find.text(_searchHint), findsNothing);
+        final gridFinder = find.byType(GridView).first;
+        final grid = tester.widget<GridView>(gridFinder);
+        final delegate =
+            grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+        expect(delegate.crossAxisCount, columns);
+        expect(delegate.mainAxisSpacing, 0);
+        expect(delegate.crossAxisSpacing, 0);
+        expect(grid.padding, const EdgeInsets.all(10));
+        expect(
+          tester.getTopLeft(find.byType(ComicPager).first).dy -
+              tester.getTopLeft(find.byType(BrowserScreen)).dy,
+          lessThanOrEqualTo(kToolbarHeight + 56),
+        );
+        await tester.tap(find.widgetWithText(Tab, 'Beta'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byIcon(Icons.sort));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Newest'));
+        await tester.pumpAndSettle();
+        await saveCategoriesSort([2, 1, 3]);
+        await tester.pumpAndSettle();
+        final tabs = tester.widget<TabBar>(find.byType(TabBar));
+        expect(tabs.controller!.index, 0);
+        expect((tabs.tabs.first as Tab).text, 'Beta');
+        expect(
+          fixture.calls('comics').last['params'],
+          jsonEncode({'categories_slug': 'beta', 'sort_by': 'mr', 'page': 1}),
+        );
+        expect(tester.takeException(), isNull);
+        await _capture(tester, 'browse-mobile-restored-$columns-columns');
+      },
+    );
   }
 
-  testWidgets('phone search restores small text-only tags and full labels',
+  for (final layout in [
+    (name: 'compact', size: const Size(393, 852), scale: 1.0),
+    (name: 'large-text', size: const Size(320, 780), scale: 2.0),
+    (name: 'wide', size: const Size(1280, 800), scale: 1.0),
+  ]) {
+    testWidgets(
+      'settings groups remove extra child indentation at ${layout.name}',
       (tester) async {
+        await _prepare(tester, size: layout.size);
+        await initProxy();
+        await initNoAnimation();
+        await initTwoPageDirection();
+        await initVolumeKeyControl();
+        await initWebDavSyncSwitch();
+        await initWebDavUrl();
+        await initWebDavUserName();
+        await initWebDavPassword();
+        await tester.pumpWidget(
+          _host(const SettingsScreen(), textScale: layout.scale),
+        );
+        await tester.pumpAndSettle();
+        final content = find.byWidgetPredicate(
+          (widget) =>
+              widget is ConstrainedBox && widget.constraints.maxWidth == 900,
+        );
+        final normalInset = tester.getRect(content).left + 16;
+        for (final group in [
+          (name: 'Account & Network', icon: Icons.manage_accounts_outlined),
+          (name: 'Reader', icon: Icons.menu_book_outlined),
+          (name: 'Sync', icon: Icons.sync_outlined),
+        ]) {
+          final heading = find.text(group.name);
+          await tester.ensureVisible(heading);
+          await tester.pumpAndSettle();
+          await tester.tap(heading);
+          await tester.pumpAndSettle();
+          final section = find.widgetWithText(ExpansionTile, group.name);
+          final icon = find.descendant(
+            of: section,
+            matching: find.byIcon(group.icon),
+          );
+          expect(icon, findsOneWidget);
+          expect(tester.getRect(icon).left, closeTo(normalInset, .5));
+          final childRows = tester
+              .widgetList<ListTile>(
+                find.descendant(of: section, matching: find.byType(ListTile)),
+              )
+              .where((row) => row.leading == null)
+              .toList();
+          expect(childRows, isNotEmpty);
+          for (final row in childRows) {
+            final title = find.byWidget(row.title!);
+            await tester.ensureVisible(title);
+            await tester.pumpAndSettle();
+            expect(tester.getRect(title).left, closeTo(normalInset, .5));
+            expect(
+              tester.getSize(find.byWidget(row)).height,
+              greaterThanOrEqualTo(48),
+            );
+            expect(title.hitTestable(), findsOneWidget);
+            expect(tester.takeException(), isNull);
+          }
+          await tester.ensureVisible(heading);
+          await tester.pumpAndSettle();
+          await _capture(tester, 'settings-${layout.name}-${group.name}');
+          await tester.tap(heading);
+          await tester.pumpAndSettle();
+          expect(find.byWidget(childRows.first.title!), findsNothing);
+          expect(tester.takeException(), isNull);
+        }
+      },
+    );
+  }
+
+  testWidgets('phone search restores small text-only tags and full labels', (
+    tester,
+  ) async {
     final fixture = await _prepare(tester, size: const Size(390, 780));
     await tester.pumpWidget(_host(const AppScreen()));
     await tester.pumpAndSettle();
@@ -611,10 +746,7 @@ void main() {
     expect(find.byIcon(Icons.local_offer_outlined), findsNothing);
     expect(tester.widget<Text>(find.text(longTag)).maxLines, isNull);
     final history = find
-        .ancestor(
-          of: find.text('quiet forest'),
-          matching: find.byType(InkWell),
-        )
+        .ancestor(of: find.text('quiet forest'), matching: find.byType(InkWell))
         .first;
     expect(tester.getSize(history).height, lessThan(40));
     expect(tester.getRect(find.text(longTag)).right, lessThanOrEqualTo(380));
@@ -623,7 +755,9 @@ void main() {
     await tester.tap(find.text('Nature'));
     await tester.pumpAndSettle();
     expect(find.byType(ComicSearchScreen), findsOneWidget);
-    expect(fixture.calls('comic_search').single['params'],
-        jsonEncode({'search_query': 'Nature', 'sort_by': '', 'page': 1}));
+    expect(
+      fixture.calls('comic_search').single['params'],
+      jsonEncode({'search_query': 'Nature', 'sort_by': '', 'page': 1}),
+    );
   });
 }

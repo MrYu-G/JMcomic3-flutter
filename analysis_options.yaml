@@ -19,6 +19,8 @@ analyzer:
     - worktrees/**
     - build/**
     - .dart_tool/**
+    - android/**
+    - windows/**
 
 linter:
   # The lint rules applied to this project can be customized in the

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 import 'package:jmcomic3/screens/components/images.dart';
+import 'package:jmcomic3/basic/page_image_provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -20,10 +21,12 @@ void main() {
       var bridgeCalls = 0;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(methodsChannel, (call) async {
-        bridgeCalls++;
-        final method = call.arguments is String ? call.arguments as String : '';
-        fail('offline page must not invoke methods bridge: $method');
-      });
+            bridgeCalls++;
+            final method = call.arguments is String
+                ? call.arguments as String
+                : '';
+            fail('offline page must not invoke methods bridge: $method');
+          });
 
       await tester.pumpWidget(
         const MaterialApp(
@@ -43,8 +46,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Offline image unavailable; download again'),
-          findsOneWidget);
+      expect(
+        find.text('Offline image unavailable; download again'),
+        findsOneWidget,
+      );
       expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
       expect(bridgeCalls, 0);
     },

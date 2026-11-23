@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jmcomic3/screens/components/images.dart';
+import 'package:jmcomic3/basic/page_image_provider.dart';
 
 const _channel = MethodChannel('methods');
 const _captureKey = ValueKey('cover-render');
@@ -14,10 +15,15 @@ const _captureKey = ValueKey('cover-render');
 Future<File> _sourceImage(int width, int height) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
-  canvas.drawRect(Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
-      Paint()..color = Colors.blue);
-  canvas.drawCircle(Offset(width / 2, height / 2),
-      (width < height ? width : height) / 4, Paint()..color = Colors.red);
+  canvas.drawRect(
+    Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+    Paint()..color = Colors.blue,
+  );
+  canvas.drawCircle(
+    Offset(width / 2, height / 2),
+    (width < height ? width : height) / 4,
+    Paint()..color = Colors.red,
+  );
   final picture = recorder.endRecording();
   final image = await picture.toImage(width, height);
   final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -34,28 +40,107 @@ Future<File> _sourceImage(int width, int height) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets(
+    'cover and avatar loaders reuse paths until source identity changes',
+    (tester) async {
+      final file = await tester.runAsync(() => _sourceImage(80, 120));
+      final requests = <String>[];
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(_channel, (call) async {
+        final request = jsonDecode(call.arguments as String) as Map;
+        requests.add('${request['method']}:${request['params']}');
+        return jsonEncode({'error_message': '', 'response_data': file!.path});
+      });
+      clearAllImageMemoryCaches();
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        clearAllImageMemoryCaches();
+        messenger.setMockMethodCallHandler(_channel, null);
+      });
+      Future<void> mount(int identity, double width) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Row(
+              children: [
+                JM3x4Cover(comicId: identity, width: width, height: 90),
+                JMSquareCover(comicId: identity, width: width, height: 90),
+                JMPhotoImage(
+                  photoName: '$identity.png',
+                  width: width,
+                  height: 90,
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.runAsync(() async {
+          for (var attempt = 0; attempt < 50; attempt++) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            await tester.pump();
+            if (tester
+                    .widgetList<RawImage>(find.byType(RawImage))
+                    .where((image) => image.image != null)
+                    .length ==
+                3) {
+              break;
+            }
+          }
+        });
+        await tester.pumpAndSettle();
+      }
+
+      await mount(1, 60);
+      expect(requests, hasLength(3));
+      expect(requests.map((request) => request.split(':').first).toSet(), {
+        'jm_3x4_cover',
+        'jm_square_cover',
+        'jm_photo_image',
+      });
+      await mount(1, 70);
+      expect(
+        requests,
+        hasLength(3),
+        reason: 'A layout-only change retains cached paths',
+      );
+      await mount(2, 70);
+      expect(
+        requests,
+        hasLength(6),
+        reason: 'Each source identity gets a new path',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   var comicId = 93000;
   for (final square in [false, true]) {
     for (final sourceSize in const [
       Size(1200, 400),
       Size(400, 1200),
-      Size(800, 800)
+      Size(800, 800),
     ]) {
       final id = comicId++;
-      final label = '${square ? 'square' : '3x4'} '
+      final label =
+          '${square ? 'square' : '3x4'} '
           '${sourceSize.width.toInt()}x${sourceSize.height.toInt()}';
-      testWidgets('$label cover scales and crops without stretching pixels',
-          (tester) async {
+      testWidgets('$label cover scales and crops without stretching pixels', (
+        tester,
+      ) async {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.resetDevicePixelRatio);
-        final file = await tester.runAsync(() =>
-            _sourceImage(sourceSize.width.toInt(), sourceSize.height.toInt()));
+        final file = await tester.runAsync(
+          () =>
+              _sourceImage(sourceSize.width.toInt(), sourceSize.height.toInt()),
+        );
         final messenger =
             TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
         messenger.setMockMethodCallHandler(_channel, (call) async {
           final request = jsonDecode(call.arguments as String) as Map;
           expect(
-              request['method'], square ? 'jm_square_cover' : 'jm_3x4_cover');
+            request['method'],
+            square ? 'jm_square_cover' : 'jm_3x4_cover',
+          );
           return jsonEncode({'error_message': '', 'response_data': file!.path});
         });
         clearAllImageMemoryCaches();
@@ -67,23 +152,31 @@ void main() {
         });
 
         final size = square ? const Size(100, 100) : const Size(90, 120);
-        await tester.pumpWidget(MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: RepaintBoundary(
-                key: _captureKey,
-                child: SizedBox.fromSize(
-                  size: size,
-                  child: square
-                      ? JMSquareCover(
-                          comicId: id, width: size.width, height: size.height)
-                      : JM3x4Cover(
-                          comicId: id, width: size.width, height: size.height),
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: RepaintBoundary(
+                  key: _captureKey,
+                  child: SizedBox.fromSize(
+                    size: size,
+                    child: square
+                        ? JMSquareCover(
+                            comicId: id,
+                            width: size.width,
+                            height: size.height,
+                          )
+                        : JM3x4Cover(
+                            comicId: id,
+                            width: size.width,
+                            height: size.height,
+                          ),
+                  ),
                 ),
               ),
             ),
           ),
-        ));
+        );
         await tester.runAsync(() async {
           for (var attempt = 0; attempt < 100; attempt++) {
             await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -100,20 +193,21 @@ void main() {
         expect(raw.image, isNotNull);
         expect(raw.fit, BoxFit.cover);
 
-        final boundary =
-            tester.renderObject<RenderRepaintBoundary>(find.byKey(_captureKey));
+        final boundary = tester.renderObject<RenderRepaintBoundary>(
+          find.byKey(_captureKey),
+        );
         await tester.runAsync(() async {
           final rendered = await boundary.toImage(pixelRatio: 1);
           try {
-            final png =
-                await rendered.toByteData(format: ui.ImageByteFormat.png);
+            final png = await rendered.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
             final name = label.replaceAll(' ', '-');
             await File('build/cover-rendering/$name.png')
                 .writeAsBytes(png!.buffer.asUint8List());
-            final pixels =
-                (await rendered.toByteData(format: ui.ImageByteFormat.rawRgba))!
-                    .buffer
-                    .asUint8List();
+            final pixels = (await rendered.toByteData(
+              format: ui.ImageByteFormat.rawRgba,
+            ))!.buffer.asUint8List();
             int minX = rendered.width,
                 minY = rendered.height,
                 maxX = -1,
@@ -132,13 +226,18 @@ void main() {
               }
             }
             expect(maxX, greaterThan(minX));
-            expect((maxX - minX + 1) / (maxY - minY + 1), closeTo(1, .05),
-                reason:
-                    'An original circle must remain round, not become an ellipse.');
+            expect(
+              (maxX - minX + 1) / (maxY - minY + 1),
+              closeTo(1, .05),
+              reason: 'An original circle must remain round, not become an ellipse.',
+            );
             final corner = (2 * rendered.width + 2) * 4;
             expect(pixels[corner], lessThan(80));
-            expect(pixels[corner + 2], greaterThan(180),
-                reason: 'BoxFit.cover must fill/crop, not add letterboxing.');
+            expect(
+              pixels[corner + 2],
+              greaterThan(180),
+              reason: 'BoxFit.cover must fill/crop, not add letterboxing.',
+            );
           } finally {
             rendered.dispose();
           }

@@ -35,3 +35,23 @@ ImageView 截图等待下一 native 帧而阻塞；截图不包含系统状态�
 
 退出后的 `dumpsys meminfo` 包含引擎、JNI 和运行时分配，其数值不等于图片缓存容量。
 报告、截图及日志按版本归档，避免下次回归覆盖发布证据。
+这些文件仅保存在本地被忽略的目录，不提交到 GitHub，也不上传为 Actions 或 Release
+附件。自定义输出路径时仍应使用 `build/` 或 `dist/` 下的目录。
+
+## Windows 登录界面回归
+
+`login_layout_test.dart` 在 Windows 原生 Flutter 引擎上复用
+`test/login_layout_test.dart`，覆盖输入校验、密码显示、键盘操作、登录与游客请求等待、
+失败重试、已保存账号加载、弹窗关闭和紧凑/宽屏布局。界面使用应用主题与中英文文案；
+后端调用全部由合成数据拦截，不读取真实账号，也不请求在线服务。
+
+```powershell
+. .\scripts\enter_build_env.ps1 -Target Windows
+flutter test --no-pub integration_test/login_layout_test.dart -d windows
+```
+
+需要本地截图时，追加
+`--dart-define=LOGIN_CAPTURE_DIR=<仓库绝对路径>/build/checks/login-layout/native`。
+截图来自实际原生引擎的 RepaintBoundary，不含系统窗口边框。紧凑尺寸及键盘 inset
+由测试设置，不能替代 Android 真机键盘、系统栏或输入法验收。截图仍只保存在本地；
+不提交、不上传。Windows 构建前置条件见 [BUILDING.md](../docs/BUILDING.md)。

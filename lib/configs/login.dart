@@ -1,20 +1,16 @@
 import 'package:event/event.dart';
 import 'package:flutter/material.dart';
-import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/login_agreement.dart';
+import 'package:jmcomic3/screens/components/dialogs.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
+import 'package:jmcomic3/screens/components/login_form.dart';
 import 'package:jmcomic3/basic/log.dart';
 import 'package:jmcomic3/basic/methods.dart';
 import 'package:jmcomic3/configs/bool_property.dart';
 import 'package:jmcomic3/configs/is_pro.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 
-enum LoginStatus {
-  notSet,
-  logging,
-  loginField,
-  loginSuccess,
-  guest,
-}
+enum LoginStatus { notSet, logging, loginField, loginSuccess, guest }
 
 late SelfInfo _selfInfo;
 LoginStatus _status = LoginStatus.notSet;
@@ -40,7 +36,54 @@ set _loginState(LoginStatus value) {
   _event.broadcast();
 }
 
+String _loginFailureMessage(AppLocalizations l10n, Object error) {
+  // Older native libraries can include the complete response in their errors.
+  // Classify it locally, but only return our own text to the UI and debug log.
+  final detail = '$error'.toLowerCase();
+  if (error is FormatException ||
+      error is TypeError ||
+      detail.contains('jm response') ||
+      detail.contains('parse json') ||
+      detail.contains('decode response') ||
+      detail.contains('decrypt') ||
+      detail.contains('invalid response')) {
+    return l10n.tr(
+      '登录服务返回了异常数据 请稍后重试或更新应用',
+      en: 'The sign-in service returned invalid data Retry later or update the app',
+    );
+  }
+  if (RegExp(r'''\b(?:status|code)["']?\s*[:=]?\s*["']?(401|403)\b''')
+          .hasMatch(detail) ||
+      detail.contains('invalid username') ||
+      detail.contains('invalid password') ||
+      detail.contains('incorrect password') ||
+      detail.contains('账号或密码') ||
+      detail.contains('帳號或密碼')) {
+    return l10n.tr(
+      '账号或密码不正确 请检查后重试',
+      en: 'Incorrect account or password Check your details and retry',
+    );
+  }
+  if (detail.contains('timeout') ||
+      detail.contains('timed out') ||
+      detail.contains('connection') ||
+      detail.contains('connect') ||
+      detail.contains('network') ||
+      detail.contains('socket') ||
+      detail.contains('dns') ||
+      detail.contains('error sending request') ||
+      RegExp(r'\bstatus\s*[:=]?\s*5\d\d\b').hasMatch(detail)) {
+    return l10n.tr(
+      '无法连接登录服务 请检查网络或切换线路后重试',
+      en: 'Unable to reach the sign-in service Check your connection or switch routes',
+    );
+  }
+  return l10n.tr('登录失败 请稍后重试', en: 'Sign-in failed Please try again later');
+}
+
 Future initLogin(BuildContext context) async {
+  final l10n = context.l10n;
+  _loginMessage = '';
   try {
     _guestMode = parseBoolPropertyValue(
       await methods.loadProperty(_guestModePropertyName),
@@ -48,7 +91,6 @@ Future initLogin(BuildContext context) async {
     );
     _loginState = LoginStatus.logging;
     final preLogin = await methods.preLogin();
-    _loginMessage = preLogin.message ?? "";
     if (!preLogin.preSet) {
       _loginState = _guestMode ? LoginStatus.guest : LoginStatus.notSet;
     } else if (preLogin.preLogin) {
@@ -58,10 +100,12 @@ Future initLogin(BuildContext context) async {
       _loginState = LoginStatus.loginSuccess;
       fav(context);
     } else {
+      _loginMessage = _loginFailureMessage(l10n, preLogin.message ?? '');
       _loginState = _guestMode ? LoginStatus.guest : LoginStatus.loginField;
     }
-  } catch (e, st) {
-    debugPrient("$e\n$st");
+  } catch (e) {
+    _loginMessage = _loginFailureMessage(l10n, e);
+    debugPrient('Pre-login failed: $_loginMessage');
     _loginState = _guestMode ? LoginStatus.guest : LoginStatus.loginField;
   } finally {
     reloadIsPro();
@@ -69,6 +113,22 @@ Future initLogin(BuildContext context) async {
 }
 
 List<FavoriteFolderItem> favData = [];
+
+Future<void> _performFolderAction(
+  BuildContext context,
+  Future<dynamic> Function() action,
+  String success,
+) async {
+  try {
+    await action();
+    // Refresh only after the server accepted the operation, so the next menu
+    // never uses a removed/renamed folder from the previous session snapshot.
+    favData = (await methods.favorite()).folderList;
+    if (context.mounted) defaultToast(context, success);
+  } catch (error) {
+    if (context.mounted) defaultToast(context, '$error');
+  }
+}
 
 Widget createFavoriteFolderItemTile(BuildContext context) {
   return ListTile(
@@ -85,13 +145,15 @@ Widget createFavoriteFolderItemTile(BuildContext context) {
         title: context.l10n.tr("创建收藏文件夹", en: "Create favorites folder"),
         hint: context.l10n.tr("文件夹名称", en: "Folder name"),
       );
-      if (name == null) {
+      if (name == null || !context.mounted) {
         return;
       }
-      await methods.createFavoriteFolder(name);
-      fav(context);
-      defaultToast(
-          context, context.l10n.tr("创建成功", en: "Created successfully"));
+      if (name.trim().isEmpty) return;
+      await _performFolderAction(
+        context,
+        () => methods.createFavoriteFolder(name.trim()),
+        context.l10n.tr('创建成功', en: 'Created successfully'),
+      );
     },
   );
 }
@@ -106,6 +168,8 @@ Widget deleteFavoriteFolderItemTile(BuildContext context) {
       )) {
         return;
       }
+      if (!context.mounted) return;
+      if (!await fav(context) || !context.mounted) return;
       var j = favData.map((i) {
         return MapEntry(i.name, i.fid);
       }).toList();
@@ -115,11 +179,12 @@ Widget deleteFavoriteFolderItemTile(BuildContext context) {
         title: context.l10n.tr("删除资料夹", en: "Delete folder"),
         values: Map.fromEntries(j),
       );
-      if (v != null && v != 0) {
-        await methods.deleteFavoriteFolder(v);
-        fav(context);
-        defaultToast(
-            context, context.l10n.tr("删除成功", en: "Deleted successfully"));
+      if (v != null && v != 0 && context.mounted) {
+        await _performFolderAction(
+          context,
+          () => methods.deleteFavoriteFolder(v),
+          context.l10n.tr('删除成功', en: 'Deleted successfully'),
+        );
       }
     },
   );
@@ -135,6 +200,8 @@ Widget renameFavoriteFolderItemTile(BuildContext context) {
       )) {
         return;
       }
+      if (!context.mounted) return;
+      if (!await fav(context) || !context.mounted) return;
       var j = favData.map((i) {
         return MapEntry(i.name, i.fid);
       }).toList();
@@ -144,34 +211,40 @@ Widget renameFavoriteFolderItemTile(BuildContext context) {
         title: context.l10n.tr("重命名资料夹", en: "Rename folder"),
         values: Map.fromEntries(j),
       );
-      if (v != null && v != 0) {
+      if (v != null && v != 0 && context.mounted) {
         var name = await displayTextInputDialog(
           context,
           title: context.l10n.tr("重命名收藏文件夹", en: "Rename favorites folder"),
           hint: context.l10n.tr("文件夹名称", en: "Folder name"),
         );
-        if (name == null) {
+        if (name == null || !context.mounted) {
           return;
         }
-        await methods.renameFavoriteFolder(v, name);
-        fav(context);
-        defaultToast(
-            context, context.l10n.tr("重命名成功", en: "Renamed successfully"));
+        if (name.trim().isEmpty) return;
+        await _performFolderAction(
+          context,
+          () => methods.renameFavoriteFolder(v, name.trim()),
+          context.l10n.tr('重命名成功', en: 'Renamed successfully'),
+        );
       }
     },
   );
 }
 
-Future fav(BuildContext buildContext) async {
+Future<bool> fav(BuildContext buildContext) async {
   try {
     favData = (await methods.favorite()).folderList;
+    return true;
   } catch (e, st) {
     debugPrient("$e\n$st");
-    defaultToast(buildContext, "$e");
+    if (buildContext.mounted) defaultToast(buildContext, "$e");
+    return false;
   }
 }
 
 Future login(String username, String password, BuildContext context) async {
+  final l10n = context.l10n;
+  _loginMessage = '';
   try {
     _loginState = LoginStatus.logging;
     final selfInfo = await methods.login(username, password);
@@ -180,10 +253,10 @@ Future login(String username, String password, BuildContext context) async {
     _selfInfo = selfInfo;
     _loginState = LoginStatus.loginSuccess;
     fav(context);
-  } catch (e, st) {
-    debugPrient("$e\n$st");
+  } catch (e) {
+    _loginMessage = _loginFailureMessage(l10n, e);
+    debugPrient('Login failed: $_loginMessage');
     _loginState = LoginStatus.loginField;
-    _loginMessage = "$e";
   }
 }
 
@@ -194,10 +267,7 @@ Future<void> enterGuestMode() async {
   _loginState = LoginStatus.guest;
 }
 
-Future<bool> ensureJwtAccess(
-  BuildContext context, {
-  String? feature,
-}) async {
+Future<bool> ensureJwtAccess(BuildContext context, {String? feature}) async {
   if (hasJwtAccess) {
     return true;
   }
@@ -210,10 +280,14 @@ Future<bool> ensureJwtAccess(
         title: Text(l10n.tr("登录提醒", en: "Login required")),
         content: Text(
           isGuestMode
-              ? l10n.tr("当前是游客模式，$targetFeature 需要登录后才能使用。",
-                  en: "Guest mode is active. $targetFeature requires login.")
-              : l10n.tr("$targetFeature 需要登录后才能使用。",
-                  en: "$targetFeature requires login."),
+              ? l10n.tr(
+                  "当前是游客模式，$targetFeature 需要登录后才能使用。",
+                  en: "Guest mode is active. $targetFeature requires login.",
+                )
+              : l10n.tr(
+                  "$targetFeature 需要登录后才能使用。",
+                  en: "$targetFeature requires login.",
+                ),
         ),
         actions: [
           TextButton(
@@ -242,314 +316,137 @@ Future loginDialog(BuildContext context) async {
   await showDialog(
     context: context,
     builder: (BuildContext context) {
-      return Container(
-        width: 30,
-        height: 30,
-        color: Colors.black.withOpacity(.1),
-        child: Center(
-          child: _LoginDialog(),
-        ),
-      );
+      return _LoginDialog();
     },
   );
-}
-
-Future showLoginAgreementBottomSheet(BuildContext context) async {
-  await showMaterialModalBottomSheet(
-    context: context,
-    backgroundColor: const Color(0xAA000000),
-    builder: (context) {
-      return SizedBox(
-        height: MediaQuery.of(context).size.height * (.6),
-        child: const _LoginAgreementSheet(),
-      );
-    },
-  );
-}
-
-Future showUserAgreementBottomSheet(BuildContext context) {
-  return showLoginAgreementBottomSheet(context);
-}
-
-Widget userAgreementSetting(BuildContext context) {
-  return ListTile(
-    onTap: () => showUserAgreementBottomSheet(context),
-    title: Text(context.l10n.tr("用户协议", en: "User agreement")),
-    subtitle:
-        Text(context.l10n.tr("查看当前应用使用协议", en: "View current app agreement")),
-  );
-}
-
-class LoginAgreementHint extends StatelessWidget {
-  final EdgeInsetsGeometry padding;
-
-  const LoginAgreementHint({
-    super.key,
-    this.padding = const EdgeInsets.fromLTRB(16, 0, 16, 8),
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final agreeStyle = Theme.of(context).textTheme.bodyMedium
-        //        ?.copyWith(color: Colors.grey)
-        ;
-    final agreeLinkStyle = agreeStyle?.copyWith(
-      decoration: TextDecoration.underline,
-      // decorationColor: Colors.grey.shade600,
-      // color: Colors.grey.shade600,
-    );
-    return Padding(
-      padding: padding,
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Text(context.l10n.tr("登录即为同意 ", en: "By logging in you agree to "),
-              style: agreeStyle),
-          InkWell(
-            onTap: () => showLoginAgreementBottomSheet(context),
-            child: Text(context.l10n.tr("使用协议", en: "Terms of use"),
-                style: agreeLinkStyle),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LoginAgreementSheet extends StatelessWidget {
-  const _LoginAgreementSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final bodyStyle = textTheme.bodyMedium;
-    return Material(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-                Expanded(
-                  child: Text(
-                    context.l10n.tr("使用协议", en: "Terms of use"),
-                    style: textTheme.titleMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 48),
-              ],
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                children: [
-                  Text(
-                    context.l10n.tr(
-                      "继续登录/使用即表示您已阅读并同意以下内容：",
-                      en: "By continuing to login/use, you acknowledge and agree to:",
-                    ),
-                    style: bodyStyle,
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    context.l10n.tr(
-                      "1. 为保障安全与改进服务，您的登录、浏览、搜索、下载等操作记录（含必要的设备与网络信息）可能会被供应商或服务器保存与分析。",
-                      en: "1. To ensure security and improve services, your login, browsing, search, and download records (including necessary device/network info) may be stored and analyzed by providers or servers.",
-                    ),
-                    style: bodyStyle,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    context.l10n.tr(
-                      "2. 请勿上传、传播或利用本服务从事任何违法违规行为；如涉及敏感内容，请自行审慎判断并遵守当地法律法规。；因此产生的后果由您自行承担。",
-                      en: "2. Do not upload, spread, or use this service for illegal activities. For sensitive content, use your own judgment and comply with local laws and regulations. You are responsible for all consequences.",
-                    ),
-                    style: bodyStyle,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    context.l10n.tr(
-                      "3. 本应用展示的任何信息仅供参考与交流，不构成医疗/诊断/治疗建议；因此产生的后果（含生理、病理等）由您自行承担。",
-                      en: "3. Any information shown in this app is for reference and communication only, and does not constitute medical/diagnostic/treatment advice. You are responsible for any resulting consequences.",
-                    ),
-                    style: bodyStyle,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    context.l10n.tr(
-                      "4. 我们可能在必要时更新协议内容；更新后继续使用视为您接受更新。",
-                      en: "4. We may update these terms when necessary. Continuing to use the app after updates means you accept the changes.",
-                    ),
-                    style: bodyStyle,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    context.l10n.tr(
-                      "* 若您不同意上述条款，请停止登录并退出使用。",
-                      en: "* If you do not agree with the terms above, please stop logging in and exit the app.",
-                    ),
-                    // style: captionStyle,
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: MaterialButton(
-                  color: Colors.orange.shade700,
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Text(
-                      context.l10n.tr("我知道了", en: "Got it"),
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _LoginDialog extends StatefulWidget {
   @override
-  State<StatefulWidget> createState() => _LoginDialogState();
+  State<_LoginDialog> createState() => _LoginDialogState();
 }
 
 class _LoginDialogState extends State<_LoginDialog> {
-  var _username = "";
-  var _password = "";
+  late Future<(String, String)> _credentials = _loadCredentials();
+  bool _busy = false;
 
-  @override
-  void initState() {
-    Future.delayed(Duration.zero, () async {
-      final username = await methods.loadUsername();
-      final password = await methods.loadPassword();
-      setState(() {
-        _username = username;
-        _password = password;
-      });
-    });
-    super.initState();
+  Future<(String, String)> _loadCredentials() async {
+    final username = await methods.loadUsername();
+    final password = await methods.loadPassword();
+    return (username, password);
+  }
+
+  Future<String?> _submit(String username, String password) async {
+    await login(username, password, context);
+    if (!mounted) return null;
+    if (loginStatus != LoginStatus.loginSuccess) {
+      return loginMessage.isEmpty ? context.l10n.loginFailed : loginMessage;
+    }
+    await reloadIsPro();
+    // Callers such as ensureJwtAccess must observe the completed authentication.
+    if (mounted) Navigator.of(context).pop();
+    return null;
+  }
+
+  Future<void> _guest() async {
+    await enterGuestMode();
+    await reloadIsPro();
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 250,
-      width: MediaQuery.of(context).size.width - 90,
-      margin: const EdgeInsets.all(30),
-      decoration: BoxDecoration(
-        borderRadius: const BorderRadius.all(Radius.circular(10)),
-        color: Theme.of(context).scaffoldBackgroundColor,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: ListView(
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  icon: const Icon(Icons.arrow_back),
-                ),
-                Expanded(child: Container()),
-              ],
-            ),
-            ListTile(
-              title: Text(context.l10n.account),
-              subtitle: Text(
-                _username == ""
-                    ? context.l10n.tr("未设置", en: "Not set")
-                    : _username,
-              ),
-              onTap: () async {
-                String? input = await displayTextInputDialog(
-                  context,
-                  src: _username,
-                  title: context.l10n.account,
-                  hint: context.l10n.inputAccount,
-                );
-                if (input != null) {
-                  setState(() {
-                    _username = input;
-                  });
-                }
-              },
-            ),
-            ListTile(
-              title: Text(context.l10n.password),
-              subtitle: Text(
-                _password == ""
-                    ? context.l10n.tr("未设置", en: "Not set")
-                    : '\u2022' * 10,
-              ),
-              onTap: () async {
-                String? input = await displayTextInputDialog(
-                  context,
-                  src: _password,
-                  title: context.l10n.password,
-                  hint: context.l10n.inputPassword,
-                  isPasswd: true,
-                );
-                if (input != null) {
-                  setState(() {
-                    _password = input;
-                  });
-                }
-              },
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Container(
-                  margin: const EdgeInsets.all(10),
-                  child: TextButton(
-                    onPressed: () async {
-                      Navigator.of(context).pop();
-                      await enterGuestMode();
-                      await reloadIsPro();
-                    },
-                    child: Text(context.l10n.guestMode),
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(l10n.login, style: theme.textTheme.titleLarge),
                   ),
-                ),
-                Container(
-                  margin: const EdgeInsets.all(10),
-                  child: MaterialButton(
-                    color: Colors.orange.shade700,
-                    onPressed: () async {
-                      Navigator.of(context).pop();
-                      await login(_username, _password, context);
-                      await reloadIsPro();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      child: Text(
-                        context.l10n.tr("保存", en: "Save"),
-                        style: TextStyle(color: Colors.white),
+                  IconButton(
+                    tooltip: l10n.tr('关闭', en: 'Close'),
+                    onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              FutureBuilder<(String, String)>(
+                future: _credentials,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          semanticsLabel: l10n.tr(
+                            '加载账号',
+                            en: 'Loading account',
+                          ),
+                        ),
                       ),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return Column(
+                      children: [
+                        Text(
+                          l10n.tr(
+                            '无法读取已保存的账号',
+                            en: 'Unable to load the saved account',
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () => setState(() {
+                                _credentials = _loadCredentials();
+                              }),
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: Text(l10n.tr('重试', en: 'Retry')),
+                            ),
+                            TextButton(
+                              onPressed: () => setState(() {
+                                _credentials = Future.value(('', ''));
+                              }),
+                              child: Text(
+                                l10n.tr('手动登录', en: 'Enter manually'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  }
+                  final (username, password) = snapshot.requireData;
+                  return LoginForm(
+                    initialUsername: username,
+                    initialPassword: password,
+                    onLogin: _submit,
+                    onGuest: _guest,
+                    onBusyChanged: (value) => setState(() => _busy = value),
+                    agreement: const LoginAgreementHint(
+                      padding: EdgeInsets.zero,
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

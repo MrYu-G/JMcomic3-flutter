@@ -1,6 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import 'package:jmcomic3/basic/entities.dart';
 import 'package:jmcomic3/configs/display_jmcode.dart';
 import 'package:jmcomic3/configs/search_title_words.dart';
@@ -52,16 +52,20 @@ class _ComicDetailHeaderState extends State<ComicDetailHeader> {
         : widget.simple?.name ?? 'JM${album.id}';
     final description = album.description.trim();
     final dark = theme.brightness == Brightness.dark;
-    final authorColor =
-        dark ? const Color(0xFFC4B5FD) : const Color(0xFF6D48AD);
+    final authorColor = dark
+        ? const Color(0xFFC4B5FD)
+        : const Color(0xFF6D48AD);
     final workColor = dark ? const Color(0xFFF4CE83) : const Color(0xFF97651C);
     final updated = _formatTimestamp(album.updateAt ?? widget.simple?.updateAt);
-    final published = _formatTimestamp(album.addtime ?? widget.simple?.addtime);
+    // Detail addtime is the verified web listing date. List-card metadata can
+    // contain the mobile API's latest-update date and must not replace it.
+    final published = _formatTimestamp(album.addtime);
     final displayJmcode = currentDisplayJmcode();
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth <= 360 ||
+        final compact =
+            constraints.maxWidth <= 360 ||
             MediaQuery.textScalerOf(context).scale(16) > 20;
         final coverWidth = compact ? 104.0 : 120.0;
         final metaStyle = TextStyle(
@@ -100,9 +104,11 @@ class _ComicDetailHeaderState extends State<ComicDetailHeader> {
                               spacing: 6,
                               runSpacing: 6,
                               children: [
-                                for (var index = 0;
-                                    index < categories.length;
-                                    index++)
+                                for (
+                                  var index = 0;
+                                  index < categories.length;
+                                  index++
+                                )
                                   _DetailChip(
                                     label: categories[index],
                                     background: index == 0
@@ -185,8 +191,9 @@ class _ComicDetailHeaderState extends State<ComicDetailHeader> {
                       _DetailChip(
                         label:
                             '${context.l10n.tr('作者', en: 'Author')}: $author',
-                        background:
-                            authorColor.withValues(alpha: dark ? .14 : .09),
+                        background: authorColor.withValues(
+                          alpha: dark ? .14 : .09,
+                        ),
                         foreground: authorColor,
                         borderColor: authorColor.withValues(alpha: .20),
                         onTap: () => widget.onSearch(author),
@@ -195,8 +202,9 @@ class _ComicDetailHeaderState extends State<ComicDetailHeader> {
                     for (final work in works)
                       _DetailChip(
                         label: '${context.l10n.tr('作品', en: 'Work')}: $work',
-                        background:
-                            workColor.withValues(alpha: dark ? .14 : .09),
+                        background: workColor.withValues(
+                          alpha: dark ? .14 : .09,
+                        ),
                         foreground: workColor,
                         borderColor: workColor.withValues(alpha: .20),
                         onTap: () => widget.onSearch(work),
@@ -223,11 +231,15 @@ class _ComicDetailHeaderState extends State<ComicDetailHeader> {
                     for (final tag in _tagsExpanded ? tags : tags.take(7))
                       _DetailChip(
                         label: tag,
-                        background: _tagColor(tag, dark)
-                            .withValues(alpha: dark ? .15 : .10),
+                        background: _tagColor(
+                          tag,
+                          dark,
+                        ).withValues(alpha: dark ? .15 : .10),
                         foreground: _tagColor(tag, dark),
-                        borderColor: _tagColor(tag, dark)
-                            .withValues(alpha: dark ? .25 : .20),
+                        borderColor: _tagColor(
+                          tag,
+                          dark,
+                        ).withValues(alpha: dark ? .25 : .20),
                         onTap: () => widget.onSearch(tag),
                         onLongPress: () => confirmCopy(context, tag),
                       ),
@@ -313,13 +325,13 @@ class _ComicDetailHeaderState extends State<ComicDetailHeader> {
       Color(0xFF087F9B),
       Color(0xFF7353B5),
       Color(0xFFA13773),
-      Color(0xFF28765E)
+      Color(0xFF28765E),
     ];
     const night = [
       Color(0xFF7BDBEE),
       Color(0xFFC5AEF4),
       Color(0xFFF0A5C9),
-      Color(0xFF88D8B5)
+      Color(0xFF88D8B5),
     ];
     var hash = 0;
     for (final rune in tag.runes) {
@@ -331,8 +343,8 @@ class _ComicDetailHeaderState extends State<ComicDetailHeader> {
   static String? _formatTimestamp(int? timestamp) {
     if (timestamp == null || timestamp <= 0) return null;
     try {
-      final date =
-          DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toLocal();
+      final date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000)
+          .toLocal();
       String two(int value) => value.toString().padLeft(2, '0');
       return '${date.year}-${two(date.month)}-${two(date.day)}';
     } on ArgumentError {
@@ -408,20 +420,20 @@ class _DetailMeta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text.rich(
-        TextSpan(
-          children: [
-            WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Icon(icon, size: 12, color: style.color),
-              ),
-            ),
-            TextSpan(text: text),
-          ],
+    TextSpan(
+      children: [
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Icon(icon, size: 12, color: style.color),
+          ),
         ),
-        style: style,
-      );
+        TextSpan(text: text),
+      ],
+    ),
+    style: style,
+  );
 }
 
 class _ExpandableDetailText extends StatefulWidget {
@@ -550,8 +562,9 @@ class _ExpandableDetailTextState extends State<_ExpandableDetailText> {
                 key: widget.textKey,
                 style: widget.style,
                 maxLines: _expanded ? null : widget.maxLines,
-                overflow:
-                    _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                overflow: _expanded
+                    ? TextOverflow.visible
+                    : TextOverflow.ellipsis,
               ),
             ),
             if (overflows)
@@ -584,30 +597,28 @@ class _DetailExpandButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => TextButton(
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          foregroundColor: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF22D3EE)
-              : const Color(0xFF087F9B),
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          minimumSize: const Size(0, 30),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          alignment: Alignment.centerLeft,
-          textStyle: Theme.of(context).textTheme.labelSmall?.copyWith(
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
-              ),
+    onPressed: onPressed,
+    style: TextButton.styleFrom(
+      foregroundColor: Theme.of(context).brightness == Brightness.dark
+          ? const Color(0xFF22D3EE)
+          : const Color(0xFF087F9B),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      minimumSize: const Size(0, 30),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      alignment: Alignment.centerLeft,
+      textStyle: Theme.of(context).textTheme.labelSmall
+          ?.copyWith(fontSize: 11, fontWeight: FontWeight.w400),
+    ),
+    child: Wrap(
+      spacing: 2,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(text),
+        Icon(
+          expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+          size: 14,
         ),
-        child: Wrap(
-          spacing: 2,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(text),
-            Icon(
-              expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-              size: 14,
-            ),
-          ],
-        ),
-      );
+      ],
+    ),
+  );
 }

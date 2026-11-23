@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/dialogs.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import 'package:jmcomic3/basic/methods.dart';
 import 'package:jmcomic3/basic/navigator.dart';
 import 'package:jmcomic3/configs/ignore_view_log.dart';
@@ -17,8 +18,10 @@ import 'components/right_click_pop.dart';
 
 ComicBasic? effectiveComicInfoSimple(ComicBasic? simple, int comicId) {
   if (simple == null || simple.name.trim().isEmpty) return null;
-  final normalized =
-      simple.name.trim().toUpperCase().replaceAll(RegExp(r'[\s#]+'), '');
+  final normalized = simple.name.trim().toUpperCase().replaceAll(
+    RegExp(r'[\s#]+'),
+    '',
+  );
   // A local ID-only history entry must not hide the album's real metadata.
   if (normalized == comicId.toString() || normalized == 'JM$comicId') {
     return null;
@@ -27,14 +30,18 @@ ComicBasic? effectiveComicInfoSimple(ComicBasic? simple, int comicId) {
 }
 
 ({int chapterId, int page, bool continuing}) comicDetailReadingTarget(
-    AlbumResponse album, ViewLog? viewLog) {
-  final canResume = viewLog != null &&
+  AlbumResponse album,
+  ViewLog? viewLog,
+) {
+  final canResume =
+      viewLog != null &&
       viewLog.id == album.id &&
       viewLog.lastViewChapterId > 0 &&
       (album.series.isEmpty
           ? viewLog.lastViewChapterId == album.id
-          : album.series
-              .any((chapter) => chapter.id == viewLog.lastViewChapterId));
+          : album.series.any(
+              (chapter) => chapter.id == viewLog.lastViewChapterId,
+            ));
   if (canResume) {
     return (
       chapterId: viewLog.lastViewChapterId,
@@ -45,7 +52,7 @@ ComicBasic? effectiveComicInfoSimple(ComicBasic? simple, int comicId) {
   return (
     chapterId: album.initialReadableChapterId,
     page: 0,
-    continuing: false
+    continuing: false,
   );
 }
 
@@ -68,10 +75,8 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
   late Future<AlbumResponse> _albumFuture = _loadAlbum();
   late Future<ViewLog?> _viewFuture = methods.findViewLog(widget.comicId);
 
-  Future<AlbumResponse> _loadAlbum() => methods.album(
-        widget.comicId,
-        ignoreViewLog: currentIgnoreVewLog(),
-      );
+  Future<AlbumResponse> _loadAlbum() =>
+      methods.album(widget.comicId, ignoreViewLog: currentIgnoreVewLog());
 
   @override
   void didChangeDependencies() {
@@ -124,30 +129,34 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
     }
   }
 
-  void _search(String keyword) => Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => ComicSearchScreen(initKeywords: keyword),
-      ));
+  void _search(String keyword) => Navigator.of(context).push(
+    MaterialPageRoute(builder: (_) => ComicSearchScreen(initKeywords: keyword)),
+  );
 
-  void _download(AlbumResponse album) => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ComicDownloadScreen(album)),
-      );
+  void _download(AlbumResponse album) =>
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => ComicDownloadScreen(album)));
 
   void _read(AlbumResponse album, int chapterId, int page) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => ComicReaderScreen(
-        comic: albumToSimple(album),
-        series: album.series,
-        chapterId: chapterId,
-        initRank: page,
-        loadChapter: methods.chapter,
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ComicReaderScreen(
+          comic: albumToSimple(album),
+          series: album.series,
+          chapterId: chapterId,
+          initRank: page,
+          loadChapter: methods.chapter,
+        ),
       ),
-    ));
+    );
   }
 
   Future<void> _changeFavourite(AlbumResponse album) async {
     if (_favouriteLoading) return;
-    if (!await ensureJwtAccess(context,
-            feature: context.l10n.tr('收藏', en: 'Favorites')) ||
+    if (!await ensureJwtAccess(
+          context,
+          feature: context.l10n.tr('收藏', en: 'Favorites'),
+        ) ||
         !mounted ||
         _favouriteLoading) {
       return;
@@ -156,11 +165,18 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
     try {
       final response = await methods.setFavorite(album.id);
       if (!mounted) return;
-      if (const {'0', 'false', 'error', 'fail', 'failed'}
-          .contains(response.status.trim().toLowerCase())) {
-        throw StateError(response.msg.isEmpty
-            ? context.l10n.tr('收藏操作失败', en: 'Could not update favorites')
-            : response.msg);
+      if (const {
+        '0',
+        'false',
+        'error',
+        'fail',
+        'failed',
+      }.contains(response.status.trim().toLowerCase())) {
+        throw StateError(
+          response.msg.isEmpty
+              ? context.l10n.tr('收藏操作失败', en: 'Could not update favorites')
+              : response.msg,
+        );
       }
       setState(() {
         album.isFavorite = switch (response.type.toLowerCase()) {
@@ -170,23 +186,29 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
         };
       });
       defaultToast(
+        context,
+        album.isFavorite
+            ? context.l10n.tr('收藏成功', en: 'Favorited')
+            : context.l10n.tr('已取消收藏', en: 'Removed from favorites'),
+      );
+      if (album.isFavorite) {
+        if (!await fav(context) || !mounted || favData.isEmpty) return;
+        final folder = await chooseMapDialog<int>(
           context,
-          album.isFavorite
-              ? context.l10n.tr('收藏成功', en: 'Favorited')
-              : context.l10n.tr('已取消收藏', en: 'Removed from favorites'));
-      if (album.isFavorite && favData.isNotEmpty) {
-        final folder = await chooseMapDialog<int>(context,
-            title: context.l10n.tr('移动到资料夹', en: 'Move to folder'),
-            values: {
-              for (final item in favData) item.name: item.fid,
-              context.l10n.tr('默认 / 不移动', en: 'Default / Keep'): 0,
-            });
+          title: context.l10n.tr('移动到资料夹', en: 'Move to folder'),
+          values: {
+            for (final item in favData) item.name: item.fid,
+            context.l10n.tr('默认 / 不移动', en: 'Default / Keep'): 0,
+          },
+        );
         if (!mounted) return;
         if (folder != null && folder != 0) {
           await methods.comicFavoriteFolderMove(album.id, folder);
           if (mounted) {
             defaultToast(
-                context, context.l10n.tr('移动成功', en: 'Moved successfully'));
+              context,
+              context.l10n.tr('移动成功', en: 'Moved successfully'),
+            );
           }
         }
       }
@@ -208,7 +230,8 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
       child: FutureBuilder<AlbumResponse>(
         future: _albumFuture,
         builder: (context, snapshot) {
-          final album = snapshot.connectionState == ConnectionState.done &&
+          final album =
+              snapshot.connectionState == ConnectionState.done &&
                   !snapshot.hasError
               ? snapshot.data
               : null;
@@ -220,19 +243,22 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
               elevation: 0,
               scrolledUnderElevation: 0,
               leading: _navButton(
-                  Icons.chevron_left,
-                  () => Navigator.maybePop(context),
-                  context.l10n.tr('返回', en: 'Back')),
+                Icons.chevron_left,
+                () => Navigator.maybePop(context),
+                context.l10n.tr('返回', en: 'Back'),
+              ),
               actions: [
                 if (album != null) ...[
                   _navButton(
-                      Icons.file_download_outlined,
-                      () => _download(album),
-                      context.l10n.tr('下载', en: 'Download')),
+                    Icons.file_download_outlined,
+                    () => _download(album),
+                    context.l10n.tr('下载', en: 'Download'),
+                  ),
                   _navButton(
-                      album.isFavorite ? Icons.bookmark : Icons.bookmark_border,
-                      _favouriteLoading ? null : () => _changeFavourite(album),
-                      context.l10n.tr('收藏', en: 'Favorites')),
+                    album.isFavorite ? Icons.bookmark : Icons.bookmark_border,
+                    _favouriteLoading ? null : () => _changeFavourite(album),
+                    context.l10n.tr('收藏', en: 'Favorites'),
+                  ),
                   const SizedBox(width: 8),
                 ],
               ],
@@ -240,8 +266,9 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
             body: album != null
                 ? _body(album)
                 : _loadingOrError(snapshot.hasError),
-            bottomNavigationBar:
-                album != null ? _bottomBar(album, background) : null,
+            bottomNavigationBar: album != null
+                ? _bottomBar(album, background)
+                : null,
           );
         },
       ),
@@ -252,31 +279,29 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
     return IconButton(
       tooltip: tooltip,
       onPressed: onPressed,
-      icon: DecoratedBox(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .05),
-        ),
-        child: Padding(
-            padding: const EdgeInsets.all(8), child: Icon(icon, size: 20)),
-      ),
+      iconSize: 24,
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      icon: Icon(icon),
     );
   }
 
   Widget _loadingOrError(bool error) {
     return Center(
       child: error
-          ? Column(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.cloud_off_outlined, size: 32),
-              const SizedBox(height: 12),
-              Text(context.l10n.tr('漫画详情加载失败', en: 'Could not load comic')),
-              TextButton.icon(
-                key: const ValueKey('comic-detail-retry'),
-                onPressed: _refresh,
-                icon: const Icon(Icons.refresh),
-                label: Text(context.l10n.tr('重试', en: 'Retry')),
-              ),
-            ])
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cloud_off_outlined, size: 32),
+                const SizedBox(height: 12),
+                Text(context.l10n.tr('漫画详情加载失败', en: 'Could not load comic')),
+                TextButton.icon(
+                  key: const ValueKey('comic-detail-retry'),
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh),
+                  label: Text(context.l10n.tr('重试', en: 'Retry')),
+                ),
+              ],
+            )
           : const CircularProgressIndicator(strokeWidth: 2),
     );
   }
@@ -292,61 +317,72 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: _contentWidth),
             child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ComicDetailHeader(
-                    key: ValueKey(album.id),
-                    album: album,
-                    simple:
-                        effectiveComicInfoSimple(widget.simple, widget.comicId),
-                    onSearch: _search,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ComicDetailHeader(
+                  key: ValueKey(album.id),
+                  album: album,
+                  simple: effectiveComicInfoSimple(
+                    widget.simple,
+                    widget.comicId,
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                    child: _tabs(album),
-                  ),
-                  Divider(
-                    key: const ValueKey('comic-detail-directory-divider'),
-                    height: 24,
-                    thickness: .8,
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Offstage(
-                            key: const ValueKey('comic-detail-panel-chapters'),
-                            offstage: _tabIndex != 0,
-                            child: ComicDetailChapters(
-                              album: album,
-                              viewFuture: _viewFuture,
-                              onRead: (chapter, page) =>
-                                  _read(album, chapter, page),
-                            ),
+                  onSearch: _search,
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                  child: _tabs(album),
+                ),
+                Divider(
+                  key: const ValueKey('comic-detail-directory-divider'),
+                  height: 24,
+                  thickness: .8,
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Offstage(
+                        key: const ValueKey('comic-detail-panel-chapters'),
+                        offstage: _tabIndex != 0,
+                        child: ComicDetailChapters(
+                          album: album,
+                          viewFuture: _viewFuture,
+                          onRead: (chapter, page) =>
+                              _read(album, chapter, page),
+                        ),
+                      ),
+                      if (_visitedTabs.contains(1))
+                        Offstage(
+                          key: const ValueKey('comic-detail-panel-comments'),
+                          offstage: _tabIndex != 1,
+                          child: ComicCommentsList(
+                            mode: 'manhua',
+                            aid: album.id,
                           ),
-                          if (_visitedTabs.contains(1))
-                            Offstage(
-                              key:
-                                  const ValueKey('comic-detail-panel-comments'),
-                              offstage: _tabIndex != 1,
-                              child: ComicCommentsList(
-                                  mode: 'manhua', aid: album.id),
-                            ),
-                          if (_visitedTabs.contains(2))
-                            Offstage(
-                              key: const ValueKey('comic-detail-panel-related'),
-                              offstage: _tabIndex != 2,
-                              child: album.relatedList.isEmpty
-                                  ? _emptyPanel(context.l10n
-                                      .tr('暂无推荐', en: 'No recommendations'))
-                                  : ComicList(
-                                      data: album.relatedList, inScroll: true),
-                            ),
-                        ]),
+                        ),
+                      if (_visitedTabs.contains(2))
+                        Offstage(
+                          key: const ValueKey('comic-detail-panel-related'),
+                          offstage: _tabIndex != 2,
+                          child: album.relatedList.isEmpty
+                              ? _emptyPanel(
+                                  context.l10n.tr(
+                                    '暂无推荐',
+                                    en: 'No recommendations',
+                                  ),
+                                )
+                              : ComicList(
+                                  data: album.relatedList,
+                                  inScroll: true,
+                                ),
+                        ),
+                    ],
                   ),
-                ]),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -364,102 +400,119 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
       color: scheme.onSurface.withValues(alpha: .05),
       borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
-      child: LayoutBuilder(builder: (context, constraints) {
-        final widths = labels.map((label) {
-          final painter = TextPainter(
-            text: TextSpan(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final widths = labels.map((label) {
+            final painter = TextPainter(
+              text: TextSpan(
                 text: label,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(fontSize: 13)),
-            textScaler: MediaQuery.textScalerOf(context),
-            textDirection: Directionality.of(context),
-          )..layout();
-          final width = painter.width + 24;
-          painter.dispose();
-          return width;
-        }).toList();
-        final scrollable =
-            widths.any((width) => width > constraints.maxWidth / 3);
-        Widget tab(int index) => Semantics(
-              selected: index == _tabIndex,
-              button: true,
-              child: InkWell(
-                key: ValueKey('comic-detail-tab-$index'),
-                onTap: () => setState(() {
-                  _tabIndex = index;
-                  _visitedTabs.add(index);
-                }),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 14, 6, 0),
-                  child: Column(children: [
-                    Text(labels[index],
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: index == _tabIndex
-                                ? FontWeight.w500
-                                : FontWeight.w400,
-                            color: index == _tabIndex
-                                ? scheme.onSurface
-                                : scheme.onSurfaceVariant)),
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(fontSize: 13),
+              ),
+              textScaler: MediaQuery.textScalerOf(context),
+              textDirection: Directionality.of(context),
+            )..layout();
+            final width = painter.width + 24;
+            painter.dispose();
+            return width;
+          }).toList();
+          final scrollable = widths.any(
+            (width) => width > constraints.maxWidth / 3,
+          );
+          Widget tab(int index) => Semantics(
+            selected: index == _tabIndex,
+            button: true,
+            child: InkWell(
+              key: ValueKey('comic-detail-tab-$index'),
+              onTap: () => setState(() {
+                _tabIndex = index;
+                _visitedTabs.add(index);
+              }),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(6, 14, 6, 0),
+                child: Column(
+                  children: [
+                    Text(
+                      labels[index],
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: index == _tabIndex
+                            ? FontWeight.w500
+                            : FontWeight.w400,
+                        color: index == _tabIndex
+                            ? scheme.onSurface
+                            : scheme.onSurfaceVariant,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     const Spacer(),
                     Container(
-                        height: 2,
-                        width: 32,
-                        decoration: BoxDecoration(
-                          color: index == _tabIndex
-                              ? const Color(0xFF22CDE0)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(2),
-                        )),
-                  ]),
+                      height: 2,
+                      width: 32,
+                      decoration: BoxDecoration(
+                        color: index == _tabIndex
+                            ? const Color(0xFF22CDE0)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            );
-        final row = IntrinsicHeight(
-          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            for (var index = 0; index < labels.length; index++)
-              scrollable
-                  ? SizedBox(width: widths[index], child: tab(index))
-                  : Expanded(child: tab(index)),
-          ]),
-        );
-        return scrollable
-            ? SingleChildScrollView(
-                scrollDirection: Axis.horizontal, child: row)
-            : row;
-      }),
+            ),
+          );
+          final row = IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var index = 0; index < labels.length; index++)
+                  scrollable
+                      ? SizedBox(width: widths[index], child: tab(index))
+                      : Expanded(child: tab(index)),
+              ],
+            ),
+          );
+          return scrollable
+              ? SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: row,
+                )
+              : row;
+        },
+      ),
     );
   }
 
   Widget _emptyPanel(String label) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .03),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontSize: 12)),
-      );
+    width: double.infinity,
+    padding: const EdgeInsets.all(32),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .03),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Text(
+      label,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        fontSize: 12,
+      ),
+    ),
+  );
 
   Widget _bottomBar(AlbumResponse album, Color background) {
     return Container(
       decoration: BoxDecoration(
-          gradient: LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [background.withValues(alpha: 0), background, background],
-        stops: const [0, .3, 1],
-      )),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [background.withValues(alpha: 0), background, background],
+          stops: const [0, .3, 1],
+        ),
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
@@ -468,79 +521,107 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
             heightFactor: 1,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: _contentWidth - 32),
-              child: Row(children: [
-                _action(
+              child: Row(
+                children: [
+                  _action(
                     'comic-detail-download',
                     Icons.file_download_outlined,
                     context.l10n.tr('下载', en: 'Download'),
-                    () => _download(album)),
-                const SizedBox(width: 4),
-                _action(
+                    () => _download(album),
+                  ),
+                  const SizedBox(width: 4),
+                  _action(
                     'comic-detail-favorite',
                     _favouriteLoading
                         ? Icons.sync
                         : album.isFavorite
-                            ? Icons.bookmark
-                            : Icons.bookmark_border,
+                        ? Icons.bookmark
+                        : Icons.bookmark_border,
                     context.l10n.tr('收藏', en: 'Favorites'),
-                    _favouriteLoading ? null : () => _changeFavourite(album)),
-                const SizedBox(width: 12),
-                Expanded(
+                    _favouriteLoading ? null : () => _changeFavourite(album),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
                     child: FutureBuilder<ViewLog?>(
-                  future: _viewFuture,
-                  builder: (context, snapshot) {
-                    final ready =
-                        snapshot.connectionState == ConnectionState.done;
-                    final target =
-                        comicDetailReadingTarget(album, snapshot.data);
-                    return DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(28),
-                        gradient: ready
-                            ? const LinearGradient(
-                                colors: [Color(0xFF19CADE), Color(0xFF347FF5)])
-                            : null,
-                      ),
-                      child: FilledButton(
-                        key: const ValueKey('comic-detail-read'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: Colors.white,
-                          shadowColor: Colors.transparent,
-                          minimumSize: const Size(0, 48),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 13),
-                          shape: const StadiumBorder(),
-                          textStyle: Theme.of(context)
-                              .textTheme
-                              .labelLarge
-                              ?.copyWith(
-                                  fontSize: 14, fontWeight: FontWeight.w500),
-                        ),
-                        onPressed: ready
-                            ? () => _read(album, target.chapterId, target.page)
-                            : null,
-                        child:
-                            Column(mainAxisSize: MainAxisSize.min, children: [
-                          Text(
-                              !ready
-                                  ? context.l10n.loading
-                                  : target.continuing
-                                      ? context.l10n
-                                          .tr('继续阅读', en: 'Continue reading')
-                                      : context.l10n
-                                          .tr('开始阅读', en: 'Start reading'),
-                              textAlign: TextAlign.center),
-                          if (ready && target.continuing)
-                            Text('P${target.page + 1}',
-                                style: const TextStyle(
-                                    fontSize: 10, fontWeight: FontWeight.w400)),
-                        ]),
-                      ),
-                    );
-                  },
-                )),
-              ]),
+                      future: _viewFuture,
+                      builder: (context, snapshot) {
+                        final ready =
+                            snapshot.connectionState == ConnectionState.done;
+                        final target = comicDetailReadingTarget(
+                          album,
+                          snapshot.data,
+                        );
+                        return DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(28),
+                            gradient: ready
+                                ? const LinearGradient(
+                                    colors: [
+                                      Color(0xFF19CADE),
+                                      Color(0xFF347FF5),
+                                    ],
+                                  )
+                                : null,
+                          ),
+                          child: FilledButton(
+                            key: const ValueKey('comic-detail-read'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: Colors.white,
+                              shadowColor: Colors.transparent,
+                              minimumSize: const Size(0, 48),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 13,
+                              ),
+                              shape: const StadiumBorder(),
+                              textStyle: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                            ),
+                            onPressed: ready
+                                ? () => _read(
+                                    album,
+                                    target.chapterId,
+                                    target.page,
+                                  )
+                                : null,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  !ready
+                                      ? context.l10n.loading
+                                      : target.continuing
+                                      ? context.l10n.tr(
+                                          '继续阅读',
+                                          en: 'Continue reading',
+                                        )
+                                      : context.l10n.tr(
+                                          '开始阅读',
+                                          en: 'Start reading',
+                                        ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                if (ready && target.continuing)
+                                  Text(
+                                    'P${target.page + 1}',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -559,14 +640,18 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
           minimumSize: const Size(48, 48),
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
         ),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 20),
-          const SizedBox(height: 3),
-          Text(label,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20),
+            const SizedBox(height: 3),
+            Text(
+              label,
               textAlign: TextAlign.center,
-              style:
-                  const TextStyle(fontSize: 10, fontWeight: FontWeight.w400)),
-        ]),
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w400),
+            ),
+          ],
+        ),
       ),
     );
   }

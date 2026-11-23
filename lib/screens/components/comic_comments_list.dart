@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/dialogs.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import 'package:jmcomic3/basic/log.dart';
 import 'package:jmcomic3/basic/methods.dart';
 import 'package:jmcomic3/configs/app_font_size.dart';

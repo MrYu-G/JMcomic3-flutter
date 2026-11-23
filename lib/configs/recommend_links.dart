@@ -12,18 +12,19 @@ Map<String, String> currentRecommendLinks() => _recommendLinks;
 
 Future<void> initRecommendLinks() async {
   try {
-    _recommendLinks =
-        normalizeRecommendLinksForDisplay(await methods.configLinks());
+    _recommendLinks = normalizeRecommendLinksForDisplay(
+      await methods.configLinks(),
+    );
   } catch (_) {
     _recommendLinks = const <String, String>{};
   }
   recommendLinksEvent.broadcast();
 }
 
-Map<String, String> normalizeRecommendLinksForDisplay(
-  Map<String, String> src,
-) {
+Map<String, String> normalizeRecommendLinksForDisplay(Map<String, String> src) {
   final result = <String, String>{};
+  final destinations = <String>{};
+  final labels = <String>{};
   src.forEach((key, value) {
     final label = key.trim();
     final url = value.trim();
@@ -32,8 +33,21 @@ Map<String, String> normalizeRecommendLinksForDisplay(
     }
     // 后端 config_links 来自持久化/远端配置，展示前统一收敛空白和旧频道入口，
     // 并返回只读 Map，避免推荐面板或测试代码误改全局配置状态。
-    result[label] =
-        label.contains("关注频道") || label == "频道" ? _followChannelLink : url;
+    final destination = label.contains("关注频道") || label == "频道"
+        ? _followChannelLink
+        : url;
+    final uri = Uri.tryParse(destination);
+    final normalizedDestination = uri == null
+        ? destination
+        : uri.removeFragment().toString().replaceFirst(RegExp(r'/$'), '');
+    final normalizedLabel = label.toLowerCase();
+    if (labels.contains(normalizedLabel) ||
+        destinations.contains(normalizedDestination)) {
+      return;
+    }
+    labels.add(normalizedLabel);
+    destinations.add(normalizedDestination);
+    result[label] = destination;
   });
   return UnmodifiableMapView<String, String>(result);
 }
