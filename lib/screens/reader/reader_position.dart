@@ -3,9 +3,10 @@ import 'dart:async';
 /// Actual visible page is the persisted position. A requested jump and a
 /// slider preview are temporary UI intent, never an optimistic read receipt.
 class ReaderPosition {
-  ReaderPosition(this.pageCount, int initialPage)
-      : assert(pageCount > 0),
-        _current = initialPage.clamp(0, pageCount - 1).toInt();
+  ReaderPosition(this.pageCount, int initialPage, {bool lockInitial = false})
+    : assert(pageCount > 0),
+      _current = initialPage.clamp(0, pageCount - 1).toInt(),
+      _initialLocked = lockInitial;
 
   final int pageCount;
   int _current;
@@ -13,12 +14,16 @@ class ReaderPosition {
   int? target;
   int? preview;
   int _revision = 0;
+  bool _initialLocked;
+
+  void unlockInitial() => _initialLocked = false;
 
   int get displayPage => preview ?? target ?? current;
   int get navigationPage => target ?? current;
   int clamp(int page) => page.clamp(0, pageCount - 1).toInt();
 
   int request(int page) {
+    unlockInitial();
     target = clamp(page);
     preview = null;
     return ++_revision;
@@ -27,6 +32,9 @@ class ReaderPosition {
   bool isCurrent(int revision) => revision == _revision;
 
   bool report(int page) {
+    // Placeholder dimensions can cause several transient visibility reports
+    // while restoring a chapter. Only user intent releases the saved anchor.
+    if (_initialLocked) return false;
     final next = clamp(page);
     final changed = current != next;
     _current = next;
@@ -86,16 +94,18 @@ class ReaderProgressWriter {
     _lastQueued = page;
     final previous = _tails[comicId] ?? Future<void>.value();
     late final Future<void> operation;
-    operation = previous.then((_) async {
-      try {
-        await save(page);
-      } catch (error, stack) {
-        if (_lastQueued == page) _lastQueued = null;
-        onError(error, stack);
-      }
-    }).whenComplete(() {
-      if (identical(_tails[comicId], operation)) _tails.remove(comicId);
-    });
+    operation = previous
+        .then((_) async {
+          try {
+            await save(page);
+          } catch (error, stack) {
+            if (_lastQueued == page) _lastQueued = null;
+            onError(error, stack);
+          }
+        })
+        .whenComplete(() {
+          if (identical(_tails[comicId], operation)) _tails.remove(comicId);
+        });
     _tails[comicId] = operation;
     return operation;
   }

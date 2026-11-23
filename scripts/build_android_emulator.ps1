@@ -6,22 +6,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'enter_build_env.ps1')
-
-# 默认使用独立仓库中的当前后端源码，允许调用方显式指定其他源码目录。
-if ([string]::IsNullOrWhiteSpace($RustBackendDir)) {
-    $RustBackendDir = Join-Path $env:JM3_BUILD_ROOT '..\jmcomic3-rust-backend\rust'
-}
-$rustCrate = (Resolve-Path -LiteralPath $RustBackendDir).Path
-if (-not (Test-Path -LiteralPath (Join-Path $rustCrate 'Cargo.toml') -PathType Leaf)) {
-    throw "Rust crate manifest not found: $rustCrate"
-}
-# 只允许 build 目录下的单级输出名，创建文件前再次确认规范路径没有越界。
-$buildRoot = [System.IO.Path]::GetFullPath((Join-Path $env:JM3_BUILD_ROOT 'build'))
-$outputRoot = [System.IO.Path]::GetFullPath((Join-Path $buildRoot $OutputName))
-if (-not $outputRoot.StartsWith(($buildRoot + [System.IO.Path]::DirectorySeparatorChar), [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "The emulator output directory must be inside the build directory: $outputRoot"
-}
+. (Join-Path $PSScriptRoot 'enter_build_env.ps1') -RustBackendDir $RustBackendDir
+$rustCrate = $env:RUST_BACKEND_RUST_DIR
+$outputRoot = Get-Jm3OutputDirectory -BuildRoot $env:JM3_BUILD_ROOT -OutputName $OutputName
 $jniOutputRoot = Join-Path $outputRoot 'jni'
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 $artifactRoot = Join-Path $env:JM3_BUILD_ROOT 'dist\device-test'

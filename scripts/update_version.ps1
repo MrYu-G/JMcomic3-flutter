@@ -21,7 +21,7 @@ $txtVersion = "v$raw"
 function Replace-Line($path, $pattern, $replacement) {
   $path = Join-Path $repoRoot $path
   if (-not (Test-Path $path)) { return $false }
-  $content = Get-Content $path -Raw
+  $content = Get-Content -LiteralPath $path -Raw -Encoding UTF8
   $updated = [regex]::Replace($content, $pattern, $replacement, 'Multiline')
   if ($updated -ne $content) {
     [System.IO.File]::WriteAllText($path, $updated, $utf8)

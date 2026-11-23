@@ -1,6 +1,6 @@
 import 'package:event/event.dart';
 import 'package:flutter/material.dart';
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/dialogs.dart';
 import 'package:jmcomic3/basic/methods.dart';
 import 'package:jmcomic3/configs/enum_property.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';

@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 import 'package:jmcomic3/screens/components/comic_pager.dart';
 import 'package:jmcomic3/screens/components/content_builder.dart';
@@ -58,8 +58,10 @@ class _WeekScreenState extends State<WeekScreen> {
         onRefresh: _refresh,
         successBuilder: (context, data) {
           final weekData = data.requireData;
-          final selectedCategoryId =
-              _resolveCategoryId(weekData.categories, _categoryId);
+          final selectedCategoryId = _resolveCategoryId(
+            weekData.categories,
+            _categoryId,
+          );
           if (!_sameCategories(_categories, weekData.categories) ||
               _categoryId != selectedCategoryId) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -99,9 +101,7 @@ class _WeekScreenState extends State<WeekScreen> {
           width: selectorWidth,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .surfaceContainerHighest
+              color: Theme.of(context).colorScheme.surfaceContainerHighest
                   .withValues(alpha: .7),
               borderRadius: BorderRadius.circular(12),
             ),
@@ -298,7 +298,8 @@ class _WeekContentState extends State<WeekContent>
       final keepType = _typeId;
       _tabController.dispose();
       _tabController = _createTabController(preferredTypeId: keepType);
-      _typeId = _displayTypes.isNotEmpty &&
+      _typeId =
+          _displayTypes.isNotEmpty &&
               _displayTypes.any((element) => element.id == keepType)
           ? keepType
           : (_displayTypes.isNotEmpty ? _displayTypes.first.id : '');
@@ -322,9 +323,7 @@ class _WeekContentState extends State<WeekContent>
   @override
   Widget build(BuildContext context) {
     if (widget.data.categories.isEmpty || _displayTypes.isEmpty) {
-      return Center(
-        child: Text(context.l10n.noContentAvailable),
-      );
+      return Center(child: Text(context.l10n.noContentAvailable));
     }
     return Column(
       children: [
@@ -355,9 +354,7 @@ class _WeekContentState extends State<WeekContent>
             key: ValueKey('week_filter_${_categoryId}_$_typeId'),
             onPage: _onPage,
             appendList: widget.data.categories.length > 1
-                ? [
-                    _buildNextCard(),
-                  ]
+                ? [_buildNextCard()]
                 : null,
           ),
         ),
@@ -368,10 +365,7 @@ class _WeekContentState extends State<WeekContent>
   Future<InnerComicPage> _onPage(int page) async {
     // 分页缓存统一交给 ComicPager 管理；重复缓存会让分页器的强制刷新再次返回旧结果。
     final response = await methods.weekFilter(_categoryId, _typeId, page);
-    return InnerComicPage(
-      total: response.total,
-      list: response.list,
-    );
+    return InnerComicPage(total: response.total, list: response.list);
   }
 
   Widget _buildNextCard() {
@@ -392,8 +386,9 @@ class _WeekContentState extends State<WeekContent>
   }
 
   void _switchToNextCategory() {
-    final currentIndex =
-        widget.data.categories.indexWhere((item) => item.id == _categoryId);
+    final currentIndex = widget.data.categories.indexWhere(
+      (item) => item.id == _categoryId,
+    );
     if (currentIndex < 0 || currentIndex + 1 >= widget.data.categories.length) {
       defaultToast(context, context.l10n.noMoreIssue);
       return;
@@ -435,12 +430,16 @@ class _WeekContentState extends State<WeekContent>
   }
 
   List<WeekType> _buildDisplayTypes(List<WeekType> types) {
-    return types.reversed.toList(growable: false);
+    // The source retired this category, but older cached responses can retain it.
+    return types.reversed
+        .where((type) => type.id.trim().toLowerCase() != 'hanman')
+        .toList(growable: false);
   }
 
   TabController _createTabController({required String preferredTypeId}) {
-    final preferredIndex =
-        _displayTypes.indexWhere((element) => element.id == preferredTypeId);
+    final preferredIndex = _displayTypes.indexWhere(
+      (element) => element.id == preferredTypeId,
+    );
     final initialIndex = preferredIndex >= 0 ? preferredIndex : 0;
     return TabController(
       length: _displayTypes.length,

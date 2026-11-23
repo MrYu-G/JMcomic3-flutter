@@ -6,72 +6,94 @@ import 'images.dart';
 
 class ComicDownloadCard extends StatelessWidget {
   final DownloadAlbum comic;
+  final VoidCallback? onActions;
 
-  const ComicDownloadCard(
-    this.comic, {
-    Key? key,
-  }) : super(key: key);
+  const ComicDownloadCard(this.comic, {super.key, this.onActions});
 
   @override
   Widget build(BuildContext context) {
-    const titleStyle = TextStyle(fontWeight: FontWeight.w500);
-    final authorStyle = TextStyle(
-      fontSize: 13,
-      color: Colors.pink.shade300,
-    );
+    final theme = Theme.of(context);
+    final status = _statusText(context);
     return Container(
-      padding: const EdgeInsets.only(top: 5, bottom: 5, left: 10, right: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).dividerColor,
-          ),
+          bottom: BorderSide(color: Theme.of(context).dividerColor),
         ),
       ),
       child: Row(
         children: [
-          Card(
-            child: JM3x4Cover(
-              comicId: comic.id,
-              width: 100 * 3 / 4,
-              height: 100,
-            ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: JM3x4Cover(comicId: comic.id, width: 60, height: 80),
           ),
-          Container(width: 10),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(comic.name, style: titleStyle),
-                Container(height: 4),
-                Text(comic.authorLabel, style: authorStyle),
-                Container(height: 4),
-                _buildCategoryRow(),
-                Container(height: 4),
-                Text.rich(TextSpan(children: [
-                  const WidgetSpan(
-                    alignment: PlaceholderAlignment.middle,
-                    child: Icon(Icons.download, size: 12),
+                Tooltip(
+                  // Hover still shows the full title; a long press belongs to the
+                  // card, which opens the download actions.
+                  triggerMode: TooltipTriggerMode.manual,
+                  message: comic.name,
+                  child: Text(
+                    comic.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall,
                   ),
-                  WidgetSpan(
-                    alignment: PlaceholderAlignment.middle,
-                    child: Container(width: 3),
-                  ),
-                  TextSpan(
-                    text: "${comic.dledImageCount} / ${comic.imageCount}",
-                    style: const TextStyle(fontSize: 10),
-                  ),
-                ])),
-                Container(height: 4),
-                _buildProgress(context),
-                Container(height: 4),
-                Text(
-                  _statusText(context),
-                  style: TextStyle(color: _statusColor()),
                 ),
+                if (comic.authorLabel.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    comic.authorLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_statusIcon(), size: 14, color: _statusColor()),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            status,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: _statusColor(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '${comic.dledImageCount} / ${comic.imageCount}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+                if (comic.downloadProgress != null) ...[
+                  const SizedBox(height: 5),
+                  _buildProgress(context),
+                ],
               ],
             ),
           ),
+          if (onActions != null)
+            IconButton(
+              tooltip: context.l10n.tr('下载操作', en: 'Download actions'),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              onPressed: onActions,
+              icon: const Icon(Icons.more_vert, size: 20),
+            ),
         ],
       ),
     );
@@ -89,7 +111,7 @@ class ComicDownloadCard extends StatelessWidget {
         value: comic.isDeleting ? null : progress,
         minHeight: 4,
         color: color,
-        backgroundColor: color.withOpacity(.14),
+        backgroundColor: color.withValues(alpha: .14),
       ),
     );
   }
@@ -107,6 +129,9 @@ class ComicDownloadCard extends StatelessWidget {
     if (comic.isFailed) {
       return context.l10n.tr("已失败", en: "Failed");
     }
+    if (comic.isPaused) {
+      return context.l10n.tr('已暂停', en: 'Paused');
+    }
     if (comic.isDeleting) {
       return context.l10n.tr("删除中", en: "Deleting");
     }
@@ -123,32 +148,25 @@ class ComicDownloadCard extends StatelessWidget {
     if (comic.isFailed) {
       return Colors.red;
     }
+    if (comic.isPaused) {
+      return Colors.blueGrey;
+    }
     if (comic.isDeleting) {
       return Colors.orange;
     }
     return Colors.grey;
   }
 
-  Widget _buildCategoryRow() {
-    if (comic is ComicSimple) {
-      var _comic = comic as ComicSimple;
-      return Row(
-        children: [
-          ..._c(_comic.category),
-          ..._c(_comic.categorySub),
-        ],
-      );
+  IconData _statusIcon() {
+    if (comic.isPaused) return Icons.pause_circle_outline;
+    if (comic.isFailed) return Icons.error_outline;
+    if (comic.isDeleting) return Icons.delete_outline;
+    if (comic.isDownloaded) return Icons.check_circle_outline;
+    if (comic.isQueuedOrDownloading) {
+      return comic.dledImageCount == 0
+          ? Icons.schedule
+          : Icons.downloading_outlined;
     }
-    return Container();
-  }
-
-  List<Widget> _c(ComicSimpleCategory category) {
-    if (category.title == null) {
-      return [];
-    }
-    return [
-      Text(category.title!),
-      Container(width: 15),
-    ];
+    return Icons.help_outline;
   }
 }

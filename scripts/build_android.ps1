@@ -4,58 +4,37 @@ param(
     [string]$Abi = 'both',
     [switch]$SkipRust,
     [switch]$AppBundle,
-    [string]$OutputName = 'android'
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')]
+    [string]$OutputName = 'android',
+    [string]$RustBackendDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'enter_build_env.ps1')
+. (Join-Path $PSScriptRoot 'enter_build_env.ps1') -RustBackendDir $RustBackendDir
 Set-Location -LiteralPath $env:JM3_BUILD_ROOT
-$outputRoot = Join-Path $env:JM3_BUILD_ROOT (Join-Path 'build' $OutputName)
+$outputRoot = Get-Jm3OutputDirectory -BuildRoot $env:JM3_BUILD_ROOT -OutputName $OutputName
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
-$env:FLUTTER_BUILD_DIR = $outputRoot
-Write-Host "Flutter output: $env:FLUTTER_BUILD_DIR"
+Write-Host "Build reports: $outputRoot"
+$abis = if ($Abi -eq 'both') { @('arm64-v8a', 'armeabi-v7a') } else { @($Abi) }
 
 if (-not $SkipRust) {
-    $bashCandidates = @(
-        (Join-Path ${env:ProgramFiles} 'Git\usr\bin\bash.exe'),
-        (Join-Path ${env:LocalAppData} 'Programs\Git\usr\bin\bash.exe')
-    )
-    $bash = $bashCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
-    if (-not $bash) {
-        $bashCommand = Get-Command bash.exe -ErrorAction SilentlyContinue
-        if ($bashCommand) { $bash = $bashCommand.Source }
-    }
-    if (-not $bash) { throw 'Git Bash (bash.exe) is required to run build_android_rust_jnilibs.sh.' }
-
-    # Git Bash needs POSIX paths for variables consumed by the shell script.
-    $posixRoot = '/' + $env:JM3_BUILD_ROOT.Substring(0, 1).ToLowerInvariant() + ($env:JM3_BUILD_ROOT.Substring(2) -replace '\\', '/')
-    $posixMsvc = '/' + $env:JM3_MSVC_BIN.Substring(0, 1).ToLowerInvariant() + ($env:JM3_MSVC_BIN.Substring(2) -replace '\\', '/')
-    $abiValue = if ($Abi -eq 'both') { 'arm64-v8a armeabi-v7a' } else { $Abi }
-    # Git Bash places /usr/bin before inherited Windows PATH entries and has a
-    # GNU `link.exe` shim. Put the MSVC linker first and also pin Cargo's host
-    # linker explicitly so Rust build scripts do not accidentally use the shim.
-    $bashCommandLine = "cd '${posixRoot}' && export PATH='${posixMsvc}:${posixRoot}/toolchains/cargo/bin:${posixRoot}/toolchains/cmake/bin:${posixRoot}/toolchains/ninja:/usr/bin:/bin' CARGO_HOME='${posixRoot}/toolchains/cargo' RUSTUP_HOME='${posixRoot}/toolchains/rustup' RUST_BACKEND_RUST_DIR='${posixRoot}/rust-backend/rust' ANDROID_NDK_HOME='${posixRoot}/toolchains/android-sdk/ndk/25.2.9519653' RUST_ANDROID_JNILIBS_SOURCE='${posixRoot}/build/rust-android-jni' CARGO_TARGET_DIR='${posixRoot}/_cache/rust-target' CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER='${posixMsvc}/link.exe' RUST_ANDROID_ABIS='${abiValue}' && bash scripts/build_android_rust_jnilibs.sh"
-    Write-Host "Building Rust JNI libraries ($abiValue)..."
-    & $bash -lc $bashCommandLine
-    if ($LASTEXITCODE -ne 0) { throw "Rust Android build failed with exit code $LASTEXITCODE" }
+    # Use the same PowerShell toolchain and validated sync path as emulator
+    # builds; no second shell can reset the selected backend or host linker.
+    Push-Location -LiteralPath $env:RUST_BACKEND_RUST_DIR
+    try {
+        foreach ($abiName in $abis) {
+            & cargo ndk -t $abiName -o $env:RUST_ANDROID_JNILIBS_SOURCE build --release --locked --lib
+            if ($LASTEXITCODE -ne 0) { throw "Rust Android build failed: $abiName ($LASTEXITCODE)" }
+        }
+    } finally { Pop-Location }
+    & (Join-Path $PSScriptRoot 'sync_android_jnilibs.ps1') -Source $env:RUST_ANDROID_JNILIBS_SOURCE -Abi $abis
 }
 
-& flutter pub get
-if ($LASTEXITCODE -ne 0) { throw "flutter pub get failed with exit code $LASTEXITCODE" }
-
-$targetPlatforms = switch ($Abi) {
-    'arm64-v8a' { 'android-arm64' }
-    'armeabi-v7a' { 'android-arm' }
-    default { 'android-arm,android-arm64' }
-}
-
+# Share release flags, external symbols, ABI/package checks, and signature
+# verification with the package-only workflow instead of keeping two variants.
 if ($AppBundle) {
-    & flutter build appbundle --release --target-platform $targetPlatforms
+    & (Join-Path $PSScriptRoot 'build_android_release_split.ps1') -Abi $abis -AabOnly -OutputName $OutputName
 } else {
-    # Keep the APK set aligned with the Rust JNI libraries we build above.
-    # Omitting --target-platform would also emit x86_64/x86 APKs, which do not
-    # contain a matching Rust library in this project.
-    & flutter build apk --release --target-platform $targetPlatforms --split-per-abi
+    & (Join-Path $PSScriptRoot 'build_android_release_split.ps1') -Abi $abis -ApkOnly -OutputName $OutputName
 }
-if ($LASTEXITCODE -ne 0) { throw "Flutter Android build failed with exit code $LASTEXITCODE" }
 Write-Host 'Android package build completed.' -ForegroundColor Green

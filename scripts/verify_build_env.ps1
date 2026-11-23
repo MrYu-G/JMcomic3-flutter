@@ -1,8 +1,8 @@
 [CmdletBinding()]
-param()
+param([string]$RustBackendDir = '')
 
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'enter_build_env.ps1')
+. (Join-Path $PSScriptRoot 'enter_build_env.ps1') -RustBackendDir $RustBackendDir
 
 function Show-Tool {
     param([Parameter(Mandatory = $true)][string]$Name, [string[]]$Arguments = @('--version'))
@@ -30,6 +30,7 @@ $requiredPackages = @(
     (Join-Path $env:ANDROID_HOME 'platforms\android-32'),
     (Join-Path $env:ANDROID_HOME 'platforms\android-35'),
     (Join-Path $env:ANDROID_HOME 'platforms\android-36'),
+    (Join-Path $env:ANDROID_HOME 'platforms\android-37'),
     (Join-Path $env:ANDROID_HOME 'build-tools\28.0.3'),
     (Join-Path $env:ANDROID_HOME 'build-tools\30.0.2'),
     (Join-Path $env:ANDROID_HOME 'build-tools\35.0.0'),
@@ -58,7 +59,7 @@ foreach ($path in $windowsArtifacts) {
 }
 
 Write-Host "[INFO] Rust metadata"
-& cargo metadata --manifest-path (Join-Path $env:JM3_BUILD_ROOT 'rust-backend\rust\Cargo.toml') --no-deps --format-version 1 | Out-Null
+& cargo metadata --locked --manifest-path (Join-Path $env:RUST_BACKEND_RUST_DIR 'Cargo.toml') --no-deps --format-version 1 | Out-Null
 if ($LASTEXITCODE -eq 0) { Write-Host '[ OK ] cargo metadata' } else { Write-Host '[FAIL] cargo metadata' -ForegroundColor Red; $ok = $false }
 
 Write-Host '[INFO] flutter doctor -v'

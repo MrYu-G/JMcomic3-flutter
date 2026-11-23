@@ -203,14 +203,14 @@ class ComicSimple extends ComicBasic {
     required this.category,
     required this.categorySub,
   }) : super(
-          id: id,
-          author: author,
-          description: description,
-          name: name,
-          image: image,
-          updateAt: updateAt,
-          addtime: addtime,
-        );
+         id: id,
+         author: author,
+         description: description,
+         name: name,
+         image: image,
+         updateAt: updateAt,
+         addtime: addtime,
+       );
 
   late final ComicSimpleCategory category;
   late final ComicSimpleCategory categorySub;
@@ -227,8 +227,8 @@ class ComicSimple extends ComicBasic {
       categorySubMap is Map<String, dynamic>
           ? categorySubMap
           : (categorySubMap is Map
-              ? Map<String, dynamic>.from(categorySubMap)
-              : {}),
+                ? Map<String, dynamic>.from(categorySubMap)
+                : {}),
     );
   }
 
@@ -273,9 +273,9 @@ class CategoriesResponse {
   late final List<Block> blocks;
 
   CategoriesResponse.fromJson(Map<String, dynamic> json) {
-    categories = List.from(
-      json['categories'],
-    ).map((e) => Categories.fromJson(e)).toList();
+    categories = List.from(json['categories'])
+        .map((e) => Categories.fromJson(e))
+        .toList();
     blocks = List.from(json['blocks']).map((e) => Block.fromJson(e)).toList();
   }
 
@@ -396,9 +396,9 @@ class AlbumResponse {
     commentTotal = json['comment_total'];
     tags = List.castFrom<dynamic, String>(json['tags']);
     works = List.castFrom<dynamic, String>(json['works']);
-    relatedList = List.from(
-      json['related_list'],
-    ).map((e) => ComicBasic.fromJson(e)).toList();
+    relatedList = List.from(json['related_list'])
+        .map((e) => ComicBasic.fromJson(e))
+        .toList();
     liked = json['liked'];
     isFavorite = json['is_favorite'];
     updateAt = _parseNullableInt(json['update_at']);
@@ -646,9 +646,10 @@ class Comment {
     content = json['content'];
     photo = json['photo'];
     spoiler = json['spoiler'];
-    replys = List.from(
-      json['replys'],
-    ).map((e) => Comment.fromJson(e)).cast<Comment>().toList();
+    replys = List.from(json['replys'])
+        .map((e) => Comment.fromJson(e))
+        .cast<Comment>()
+        .toList();
   }
 
   Map<String, dynamic> toJson() {
@@ -890,9 +891,9 @@ class Favorite extends CountPage<ComicSimple> {
   late final List<FavoriteFolderItem> folderList;
   Favorite.fromJson(Map<String, dynamic> json) : super.fromJson(json) {
     list = List.from(json['list']).map((e) => ComicSimple.fromJson(e)).toList();
-    folderList = List.from(
-      json['folder_list'],
-    ).map((e) => FavoriteFolderItem.fromJson(e)).toList();
+    folderList = List.from(json['folder_list'])
+        .map((e) => FavoriteFolderItem.fromJson(e))
+        .toList();
   }
 
   @override
@@ -1098,12 +1099,12 @@ class GamePage {
   GamePage.fromJson(Map<String, dynamic> json) {
     games = List.from(json['games']).map((e) => Game.fromJson(e)).toList();
     gamesTotal = json['games_total'];
-    categories = List.from(
-      json['categories'],
-    ).map((e) => GameCategory.fromJson(e)).toList();
-    hotGames = List.from(
-      json['hot_games'],
-    ).map((e) => Game.fromJson(e)).toList();
+    categories = List.from(json['categories'])
+        .map((e) => GameCategory.fromJson(e))
+        .toList();
+    hotGames = List.from(json['hot_games'])
+        .map((e) => Game.fromJson(e))
+        .toList();
   }
 
   Map<String, dynamic> toJson() {
@@ -1377,12 +1378,15 @@ class DownloadAlbum {
   late final int dlStatus;
   late final int imageCount;
   late final int dledImageCount;
-  late final List<String> _authorList =
-      List.unmodifiable(_downloadMetadataList(author));
-  late final List<String> _tagList =
-      List.unmodifiable(_downloadMetadataList(tags));
-  late final List<String> _workList =
-      List.unmodifiable(_downloadMetadataList(works));
+  late final List<String> _authorList = List.unmodifiable(
+    _downloadMetadataList(author),
+  );
+  late final List<String> _tagList = List.unmodifiable(
+    _downloadMetadataList(tags),
+  );
+  late final List<String> _workList = List.unmodifiable(
+    _downloadMetadataList(works),
+  );
   late final String _authorLabel = _authorList.join(", ");
 
   /// 下载任务状态由后端持久化并驱动列表/详情页刷新策略，前端只做只读解释。
@@ -1390,6 +1394,7 @@ class DownloadAlbum {
   bool get isDownloaded => dlStatus == 1;
   bool get isFailed => dlStatus == 2;
   bool get isDeleting => dlStatus == 3;
+  bool get isPaused => dlStatus == 4;
   bool get shouldAutoRefreshStatus => isQueuedOrDownloading || isDeleting;
 
   /// 作者/标签/作品在历史库中可能是纯文本，新后端则可能返回 JSON 字符串或数组。
@@ -1543,8 +1548,9 @@ class DlImage {
       height: height,
       localPath: replaceLocalPath ? localPath : (localPath ?? this.localPath),
       localAvailable: localAvailable ?? this.localAvailable,
-      localState:
-          replaceLocalState ? localState : (localState ?? this.localState),
+      localState: replaceLocalState
+          ? localState
+          : (localState ?? this.localState),
     );
   }
 
@@ -1558,17 +1564,20 @@ class DlImage {
     dlStatus = _toInt(json['dl_status']);
     width = _toInt(json['width']);
     height = _toInt(json['height']);
-    localPath = json['local_path'] is String &&
+    localPath =
+        json['local_path'] is String &&
             (json['local_path'] as String).trim().isNotEmpty
         ? (json['local_path'] as String).trim()
         : null;
     final rawLocalAvailable = json['local_available'];
-    localAvailable = rawLocalAvailable == true ||
+    localAvailable =
+        rawLocalAvailable == true ||
         (rawLocalAvailable is String &&
             rawLocalAvailable.trim().toLowerCase() == 'true');
     final state = json['local_state'];
-    localState =
-        state is String && state.trim().isNotEmpty ? state.trim() : null;
+    localState = state is String && state.trim().isNotEmpty
+        ? state.trim()
+        : null;
   }
 
   Map<String, dynamic> toJson() {
@@ -1666,9 +1675,9 @@ class WeekData {
   late List<WeekType> types;
 
   WeekData.fromJson(Map<String, dynamic> json) {
-    categories = List.from(
-      json['categories'],
-    ).map((e) => WeekCategory.fromJson(e)).toList();
+    categories = List.from(json['categories'])
+        .map((e) => WeekCategory.fromJson(e))
+        .toList();
     types = List.from(json['type']).map((e) => WeekType.fromJson(e)).toList();
   }
 }
