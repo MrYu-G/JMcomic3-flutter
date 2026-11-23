@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-rust_dir="${RUST_BACKEND_RUST_DIR:-$repo_root/rust-backend/rust}"
+rust_dir="${RUST_BACKEND_RUST_DIR:-}"
 out_dir="${RUST_ANDROID_JNILIBS_SOURCE:-$repo_root/build/rust-android-jni}"
 source_lib_name="${RUST_ANDROID_SOURCE_LIB_NAME:-librust_lib_jasmine.so}"
 dest_lib_name="librust.so"
@@ -112,7 +112,19 @@ check_git_abi_change_set() {
   fi
 }
 
-if [ "$verify_only" -eq 0 ] && [ ! -d "$rust_dir" ]; then
+if [ "$verify_only" -eq 0 ] && [ -z "$rust_dir" ]; then
+  for candidate in "$repo_root/rust-backend/rust" "$repo_root/../jmcomic3-rust-backend/rust"; do
+    if [ -f "$candidate/Cargo.toml" ]; then
+      if [ -n "$rust_dir" ]; then
+        echo "Multiple backend checkouts found; set RUST_BACKEND_RUST_DIR explicitly." >&2
+        exit 1
+      fi
+      rust_dir="$candidate"
+    fi
+  done
+fi
+
+if [ "$verify_only" -eq 0 ] && [ ! -f "$rust_dir/Cargo.toml" ]; then
   echo "Rust backend directory not found: $rust_dir" >&2
   echo "Set RUST_BACKEND_RUST_DIR to the private backend rust/ directory." >&2
   exit 1
@@ -129,7 +141,7 @@ if [ -z "$flutter_root" ] && command -v flutter >/dev/null 2>&1; then
   flutter_root="$(cd "$(dirname "$flutter_bin")/.." && pwd)"
 fi
 
-if [ ! -f "$repo_root/android/local.properties" ] && [ -n "$flutter_root" ]; then
+if [ "$verify_only" -eq 0 ] && [ ! -f "$repo_root/android/local.properties" ] && [ -n "$flutter_root" ]; then
   {
     echo "flutter.sdk=$flutter_root"
     if [ -n "${ANDROID_HOME:-}" ]; then
@@ -158,7 +170,7 @@ if [ "$verify_only" -eq 0 ]; then
 
   pushd "$rust_dir" >/dev/null
   for abi in $abi_list; do
-    cargo ndk -t "$abi" -o "$out_dir" build --release
+    cargo ndk -t "$abi" -o "$out_dir" build --release --locked --lib
   done
   popd >/dev/null
 
@@ -179,7 +191,9 @@ if [ "$verify_only" -eq 0 ]; then
     dest_path="$dest_dir/$dest_lib_name"
     mkdir -p "$dest_dir"
     cp "$source_path" "$dest_path"
-    rm -f "$dest_dir/$source_lib_name"
+    if [ "$source_lib_name" != "$dest_lib_name" ]; then
+      rm -f "$dest_dir/$source_lib_name"
+    fi
     if [ "$(sha256_file "$source_path")" != "$(sha256_file "$dest_path")" ]; then
       echo "Hash mismatch after copying $abi: $source_path -> $dest_path" >&2
       exit 1

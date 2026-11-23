@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/dialogs.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import 'package:jmcomic3/basic/log.dart';
 import 'package:jmcomic3/basic/methods.dart';
 import 'package:jmcomic3/configs/login.dart';
@@ -19,9 +20,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   int _folderId = 0;
   bool _isLoading = true;
 
-  final Map<int, String> _folderMap = {
-    0: "",
-  };
+  final Map<int, String> _folderMap = {0: ""};
 
   _chooseFolder() async {
     _folderMap[0] = context.l10n.all;
@@ -137,8 +136,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           : ComicPager(
               key: Key("FAVOUR:$_folderId:$_sort"),
               onPage: (int page) async {
-                final response =
-                    await methods.favorites(_folderId, page, _sort);
+                final response = await methods.favorites(
+                  _folderId,
+                  page,
+                  _sort,
+                );
                 if (mounted) {
                   setState(() {
                     favData = response.folderList;

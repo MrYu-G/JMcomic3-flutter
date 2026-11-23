@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:another_xlider/another_xlider.dart';
 import 'package:event/event.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,11 +9,12 @@ import 'package:flutter/scheduler.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:zoomable_positioned_list/zoomable_positioned_list.dart'
     as zoomable;
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import 'package:jmcomic3/basic/log.dart';
 import 'package:jmcomic3/basic/methods.dart';
 import 'package:jmcomic3/configs/reader_controller_type.dart';
 import 'package:jmcomic3/configs/reader_direction.dart';
+import 'package:jmcomic3/configs/reader_preload.dart';
 import 'package:jmcomic3/configs/reader_slider_position.dart';
 import 'package:jmcomic3/configs/reader_type.dart';
 import 'package:jmcomic3/configs/two_page_direction.dart';
@@ -23,16 +23,19 @@ import 'package:jmcomic3/screens/components/content_error.dart';
 import 'package:jmcomic3/screens/components/content_loading.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:photo_view/photo_view_gallery.dart';
+import 'package:jmcomic3/basic/page_image_provider.dart';
 
 import '../configs/ignore_view_log.dart';
 import '../configs/no_animation.dart';
 import '../configs/volume_key_control.dart';
 import '../basic/reader_system_ui.dart';
+import '../basic/reader_image_session.dart';
 import 'components/images.dart';
 import 'components/right_click_pop.dart';
 import '../basic/reader_pages.dart';
 import '../basic/page_pairing.dart';
 import 'reader/reader_position.dart';
+import 'reader/reader_info_bar.dart';
 
 part 'reader/reader_viewers.dart';
 part 'reader/reader_panels.dart';
@@ -75,7 +78,8 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
       }
     } catch (error, stackTrace) {
       debugPrient(
-          "server history failed: ${error.runtimeType}/${stackTrace.runtimeType}");
+        "server history failed: ${error.runtimeType}/${stackTrace.runtimeType}",
+      );
     }
   }
 
@@ -83,9 +87,7 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
     // A custom offline loader may throw before returning a Future. Normalize
     // that case into FutureBuilder's error path instead of failing initState
     // or a setState callback synchronously.
-    return Future<ChapterResponse>.sync(
-      () => widget.loadChapter(chapterId),
-    );
+    return Future<ChapterResponse>.sync(() => widget.loadChapter(chapterId));
   }
 
   void _load() {
@@ -110,23 +112,26 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
     _navigationInFlight = true;
     try {
       await Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (BuildContext context) {
-          return ComicReaderScreen(
-            comic: widget.comic,
-            series: widget.series,
-            chapterId: chapterId,
-            initRank: initRank,
-            loadChapter: widget.loadChapter,
-            fullScreenOnInit: fullScreen,
-          );
-        }),
+        MaterialPageRoute(
+          builder: (BuildContext context) {
+            return ComicReaderScreen(
+              comic: widget.comic,
+              series: widget.series,
+              chapterId: chapterId,
+              initRank: initRank,
+              loadChapter: widget.loadChapter,
+              fullScreenOnInit: fullScreen,
+            );
+          },
+        ),
       );
     } catch (error, stackTrace) {
       // A route can disappear while a control callback is waiting. Keep the
       // old reader usable when Navigator rejects the replacement instead of
       // leaving the single-flight guard permanently locked.
       debugPrient(
-          "reader navigation failed: ${error.runtimeType}/${stackTrace.runtimeType}");
+        "reader navigation failed: ${error.runtimeType}/${stackTrace.runtimeType}",
+      );
     } finally {
       _navigationInFlight = false;
     }
@@ -182,10 +187,7 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
           );
         }
         if (snapshot.connectionState != ConnectionState.done) {
-          return Scaffold(
-            appBar: AppBar(),
-            body: const ContentLoading(),
-          );
+          return Scaffold(appBar: AppBar(), body: const ContentLoading());
         }
         final chapter = snapshot.requireData;
         final imageCount = chapter.images.length;
@@ -265,8 +267,9 @@ void addVolumeListen() {
   }
   _volumeListenCount++;
   if (_volumeListenCount == 1) {
-    volumeS =
-        volumeButtonChannel.receiveBroadcastStream().listen(_onVolumeEvent);
+    volumeS = volumeButtonChannel.receiveBroadcastStream().listen(
+      _onVolumeEvent,
+    );
   }
 }
 
@@ -293,7 +296,7 @@ class _ReaderKeyboardHolder extends StatefulWidget {
   final Widget child;
 
   const _ReaderKeyboardHolder({required this.child, Key? key})
-      : super(key: key);
+    : super(key: key);
 
   @override
   State<_ReaderKeyboardHolder> createState() => _ReaderKeyboardHolderState();
@@ -326,8 +329,9 @@ class _ReaderKeyboardHolderState extends State<_ReaderKeyboardHolder> {
             _readerControllerEvent.broadcast(_ReaderControllerEventArgs("UP"));
           }
           if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-            _readerControllerEvent
-                .broadcast(_ReaderControllerEventArgs("DOWN"));
+            _readerControllerEvent.broadcast(
+              _ReaderControllerEventArgs("DOWN"),
+            );
           }
         }
       },
@@ -421,18 +425,17 @@ Widget buildComicReaderForTest({
   required ReaderType readerType,
   required ReaderDirection direction,
   int startIndex = 0,
-}) =>
-    _ComicReader(
-      key: key,
-      comicId: chapter.id,
-      chapter: chapter,
-      startIndex: startIndex,
-      readerType: readerType,
-      readerDirection: direction,
-      fullScreenOnInit: false,
-      reload: (_, __) {},
-      onChangeEp: (_, __) {},
-    );
+}) => _ComicReader(
+  key: key,
+  comicId: chapter.id,
+  chapter: chapter,
+  startIndex: startIndex,
+  readerType: readerType,
+  readerDirection: direction,
+  fullScreenOnInit: false,
+  reload: (_, __) {},
+  onChangeEp: (_, __) {},
+);
 
 /// 测试驱动与键盘/音量键相同的跳页入口，验证真实动画产生的中间页回调。
 @visibleForTesting
@@ -447,12 +450,13 @@ void controlComicReaderForTest(String direction) {
 
 @visibleForTesting
 ({int current, int slider, int? jumpTarget}) comicReaderProgressForTest(
-    GlobalKey key) {
+  GlobalKey key,
+) {
   final state = key.currentState! as _ComicReaderState;
   return (
     current: state._current,
     slider: state._slider,
-    jumpTarget: state._jumpTarget
+    jumpTarget: state._jumpTarget,
   );
 }
 
@@ -467,6 +471,7 @@ abstract class _ComicReaderState extends State<_ComicReader>
   bool _modalInFlight = false;
   bool _repaintQueued = false;
   int _preloadRevision = 0;
+  ReaderImageSession? _imageSession;
   final Map<int, PageImageProvider> _providers = {};
   late List<PageDescriptor> _pages;
 
@@ -491,8 +496,14 @@ abstract class _ComicReaderState extends State<_ComicReader>
   @override
   void initState() {
     super.initState();
-    _position = ReaderPosition(widget.chapter.images.length, widget.startIndex);
-    _position.report(_normalizePage(widget.startIndex));
+    final initial = widget.startIndex
+        .clamp(0, widget.chapter.images.length - 1)
+        .toInt();
+    _position = ReaderPosition(
+      widget.chapter.images.length,
+      _paired ? (initial ~/ 2) * 2 : initial,
+      lockInitial: true,
+    );
     _fullScreen = widget.fullScreenOnInit;
     final comicId = widget.comicId;
     final chapterId = widget.chapter.id;
@@ -505,6 +516,9 @@ abstract class _ComicReaderState extends State<_ComicReader>
     _pages = widget.chapter.offlineImages == null
         ? ReaderPageRepository.fromOnline(widget.chapter.images)
         : ReaderPageRepository.fromOffline(widget.chapter.offlineImages!);
+    if (widget.chapter.offlineImages == null) {
+      _imageSession = ReaderImageSession();
+    }
     WidgetsBinding.instance.addObserver(this);
     _readerControllerEvent.subscribe(_onPageControl);
     if (Platform.isAndroid && currentVolumeKeyControl()) {
@@ -526,21 +540,30 @@ abstract class _ComicReaderState extends State<_ComicReader>
   PageImageProvider _readerPageProvider(int index) =>
       _providers.putIfAbsent(index, () {
         final page = _pageAt(index);
-        return PageImageProvider(widget.chapter.id, page.name,
-            pageIndex: page.sourceIndex,
-            localPath: page.localAvailable ? page.localPath : null,
-            localOnly: page.localPath != null);
+        return PageImageProvider(
+          widget.chapter.id,
+          page.name,
+          pageIndex: page.sourceIndex,
+          readerSession: _imageSession,
+          localPath: page.localAvailable ? page.localPath : null,
+          localOnly: page.localPath != null,
+        );
       });
 
   void _preloadAround(int page) {
     final revision = ++_preloadRevision;
-    final count = _paired ? 4 : 3;
+    final pages = readerPreloadPages(
+      page: page,
+      pageCount: _pages.length,
+      count: currentReaderPreloadCount,
+      direction: currentReaderPreloadDirection,
+      paired: _paired,
+    );
+    var next = 0;
     Future<void> run() async {
-      for (var index = page;
-          index < min(page + count, widget.chapter.images.length);
-          index++) {
+      while (next < pages.length) {
         if (!mounted || revision != _preloadRevision) return;
-        final provider = _readerPageProvider(index);
+        final provider = _readerPageProvider(pages[next++]);
         await precacheImage(provider, context, onError: (_, __) {});
         if (!mounted) {
           imageCache.evict(provider, includeLive: true);
@@ -549,9 +572,13 @@ abstract class _ComicReaderState extends State<_ComicReader>
       }
     }
 
-    unawaited(run().catchError((Object error, StackTrace stack) {
-      debugPrient('reader preload failed: ${error.runtimeType}');
-    }));
+    unawaited(
+      Future.wait<void>([run(), run()])
+          .then<void>((_) {})
+          .catchError((Object error, StackTrace stack) {
+            debugPrient('reader preload failed: ${error.runtimeType}');
+          }),
+    );
   }
 
   void _repaint() {
@@ -612,19 +639,24 @@ abstract class _ComicReaderState extends State<_ComicReader>
         event == null ||
         _modalInFlight ||
         _navigationInFlight ||
-        ModalRoute.of(context)?.isCurrent == false) return;
+        ModalRoute.of(context)?.isCurrent == false) {
+      return;
+    }
     final delta = event.key == 'UP'
         ? -1
         : event.key == 'DOWN'
-            ? 1
-            : 0;
+        ? 1
+        : 0;
     if (delta != 0) {
-      _needJumpTo(_position.navigationPage + delta * (_paired ? 2 : 1),
-          !currentNoAnimation());
+      _needJumpTo(
+        _position.navigationPage + delta * (_paired ? 2 : 1),
+        !currentNoAnimation(),
+      );
     }
   }
 
   void _cancelJump() {
+    _position.unlockInitial();
     if (_position.target == null) return;
     _position.cancel();
     _repaint();
@@ -658,6 +690,11 @@ abstract class _ComicReaderState extends State<_ComicReader>
 
     release();
     WidgetsBinding.instance.addPostFrameCallback((_) => release());
+    unawaited(
+      _imageSession?.close().catchError((Object error, StackTrace stack) {
+        debugPrient('reader cache cleanup failed: ${error.runtimeType}');
+      }),
+    );
     super.dispose();
   }
 
@@ -709,46 +746,80 @@ abstract class _ComicReaderState extends State<_ComicReader>
               title: Text(widget.chapter.name),
               actions: [
                 IconButton(
-                    onPressed: _onChooseEp, icon: const Icon(Icons.menu_open)),
+                  onPressed: _onChooseEp,
+                  tooltip: context.l10n.tr('章节列表', en: 'Chapters'),
+                  icon: const Icon(Icons.format_list_numbered),
+                ),
                 IconButton(
-                    onPressed: _onMoreSetting,
-                    icon: const Icon(Icons.more_horiz)),
+                  onPressed: _onMoreSetting,
+                  tooltip: context.l10n.tr('阅读设置', en: 'Reader settings'),
+                  icon: const Icon(Icons.tune),
+                ),
               ],
             ),
-      body: Stack(children: [
-        Positioned.fill(child: _buildViewer()),
-        if (!_fullScreen && sideSlider)
-          Align(
-            alignment: currentReaderSliderPosition == ReaderSliderPosition.left
-                ? Alignment.centerLeft
-                : Alignment.centerRight,
-            child: Container(
-                width: 36,
+      body: Stack(
+        children: [
+          Positioned.fill(child: _buildViewer()),
+          if (_fullScreen)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(
+                top: false,
+                child: IgnorePointer(
+                  child: ReaderInfoBar(
+                    page: _current + 1,
+                    total: _pages.length,
+                  ),
+                ),
+              ),
+            ),
+          if (!_fullScreen && sideSlider)
+            Align(
+              alignment:
+                  currentReaderSliderPosition == ReaderSliderPosition.left
+                  ? Alignment.centerLeft
+                  : Alignment.centerRight,
+              child: Container(
+                width: 48,
                 height: 300,
                 color: const Color(0x88000000),
-                child: _buildSliderWidget(Axis.vertical)),
-          ),
-        if (currentReaderControllerType == ReaderControllerType.controller &&
-            (_fullScreen || sideSlider))
-          SafeArea(
+                child: _buildSliderWidget(Axis.vertical),
+              ),
+            ),
+          if (currentReaderControllerType == ReaderControllerType.controller &&
+              (_fullScreen || sideSlider))
+            SafeArea(
               child: Align(
-            alignment: Alignment.bottomLeft,
-            child: IconButton(
-                onPressed: _toggleFullscreen,
-                color: Colors.white,
-                icon: Icon(
-                    _fullScreen ? Icons.fullscreen_exit : Icons.fullscreen)),
-          )),
-        if (_position.preview != null)
-          IgnorePointer(
+                alignment: Alignment.bottomLeft,
+                child: IconButton(
+                  onPressed: _toggleFullscreen,
+                  color: Colors.white,
+                  tooltip: _fullScreen
+                      ? context.l10n.tr('退出全屏', en: 'Exit fullscreen')
+                      : context.l10n.tr('全屏', en: 'Fullscreen'),
+                  icon: Icon(
+                    _fullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                  ),
+                ),
+              ),
+            ),
+          if (_position.preview != null)
+            IgnorePointer(
               child: Center(
-                  child: Container(
-            padding: const EdgeInsets.all(12),
-            color: const Color(0xAA000000),
-            child: Text('${_slider + 1} / ${widget.chapter.images.length}',
-                style: const TextStyle(color: Colors.white, fontSize: 28)),
-          ))),
-      ]),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  color: const Color(0xAA000000),
+                  child: Text(
+                    '${_slider + 1} / ${widget.chapter.images.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 28),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
       bottomNavigationBar: _fullScreen || sideSlider
           ? null
           : ColoredBox(
@@ -756,69 +827,126 @@ abstract class _ComicReaderState extends State<_ComicReader>
               color: const Color(0x88000000),
               child: SafeArea(
                 top: false,
-                child: SizedBox(
-                  height: 45,
-                  child: Row(children: [
-                    IconButton(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Row(
+                    children: [
+                      IconButton(
                         onPressed: _toggleFullscreen,
                         color: Colors.white,
-                        icon: const Icon(Icons.fullscreen)),
-                    Expanded(
-                      child: _buildSliderWidget(Axis.horizontal),
-                    ),
-                    Text('${_slider + 1}/${widget.chapter.images.length}',
-                        style: const TextStyle(color: Colors.white)),
-                    IconButton(
-                        onPressed: _onNextAction,
+                        tooltip: context.l10n.tr('全屏', en: 'Fullscreen'),
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        icon: const Icon(Icons.fullscreen),
+                      ),
+                      Expanded(
+                        // A native Slider fills a bounded height. Limit its
+                        // touch target so the bar cannot fill the viewport.
+                        child: SizedBox(
+                          height: 48,
+                          child: _buildSliderWidget(Axis.horizontal),
+                        ),
+                      ),
+                      _buildPageCounter(),
+                      IconButton(
+                        onPressed: _nextChapterId == null
+                            ? null
+                            : _onNextAction,
                         color: Colors.white,
-                        icon: const Icon(Icons.skip_next_outlined)),
-                  ]),
+                        disabledColor: Colors.white38,
+                        tooltip: _nextChapterId == null
+                            ? context.l10n.tr('已是最后一章', en: 'Last chapter')
+                            : context.l10n.tr('下一章', en: 'Next chapter'),
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        icon: Icon(
+                          widget.readerDirection == ReaderDirection.rightToLeft
+                              ? Icons.skip_previous_outlined
+                              : Icons.skip_next_outlined,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
     );
   }
 
+  Widget _buildPageCounter() {
+    final total = widget.chapter.images.length;
+    final style = DefaultTextStyle.of(context).style.merge(
+      const TextStyle(
+        color: Colors.white,
+        fontSize: 12,
+        fontFeatures: [FontFeature.tabularFigures()],
+      ),
+    );
+    // Lay out the final digit count with the same Text widget as the visible
+    // value so scaling, bold text and spacing overrides reserve equal space.
+    return Stack(
+      key: const ValueKey('reader-page-counter'),
+      children: [
+        ExcludeSemantics(
+          child: Opacity(
+            opacity: 0,
+            child: Text(
+              '$total/$total',
+              style: style,
+              maxLines: 1,
+              softWrap: false,
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: Text(
+            key: const ValueKey('reader-page-counter-value'),
+            '${_slider + 1}/$total',
+            style: style,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            softWrap: false,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildSliderWidget(Axis axis) {
     if (widget.chapter.images.length <= 1) return const SizedBox.shrink();
-    return FlutterSlider(
-      axis: axis,
-      handlerWidth: 14,
-      handlerHeight: 14,
-      touchSize: 17,
-      handler: FlutterSliderHandler(
-        decoration: const BoxDecoration(),
-        child: const DecoratedBox(
-          key: ValueKey('reader-progress-thumb'),
-          decoration:
-              BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-          child: SizedBox.expand(),
-        ),
+    final slider = SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        trackHeight: 3,
+        thumbColor: Colors.white,
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+        overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
+        activeTrackColor: Theme.of(context).colorScheme.secondary,
+        inactiveTrackColor: Colors.grey.shade300,
+        showValueIndicator: ShowValueIndicator.never,
       ),
-      handlerAnimation: const FlutterSliderHandlerAnimation(scale: 1),
-      trackBar: FlutterSliderTrackBar(
-        activeTrackBarHeight: 3,
-        inactiveTrackBarHeight: 3,
-        inactiveTrackBar: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          color: Colors.grey.shade300,
+      child: Slider(
+        key: const ValueKey('reader-progress-slider'),
+        value: _slider.toDouble(),
+        min: 0,
+        max: (widget.chapter.images.length - 1).toDouble(),
+        divisions: widget.chapter.images.length - 1,
+        semanticFormatterCallback: (value) => context.l10n.tr(
+          '第 ${value.round() + 1} 页，共 ${widget.chapter.images.length} 页',
+          en: 'Page ${value.round() + 1} of ${widget.chapter.images.length}',
         ),
-        activeTrackBar: BoxDecoration(
-          borderRadius: BorderRadius.circular(4),
-          color: Theme.of(context).colorScheme.secondary,
-        ),
+        onChangeStart: (_) => setState(() => _position.preview = _current),
+        onChanged: (value) =>
+            setState(() => _position.preview = _position.clamp(value.round())),
+        onChangeEnd: (value) => _needJumpTo(value.round(), false),
       ),
-      values: [_slider.toDouble()],
-      min: 0,
-      max: (widget.chapter.images.length - 1).toDouble(),
-      onDragStarted: (_, __, ___) =>
-          setState(() => _position.preview = _current),
-      onDragging: (_, value, __) =>
-          setState(() => _position.preview = _position.clamp(value.toInt())),
-      onDragCompleted: (_, value, __) => _needJumpTo(value.toInt(), false),
-      step: const FlutterSliderStep(step: 1, isPercentRange: false),
-      tooltip: FlutterSliderTooltip(disabled: true),
     );
+    return axis == Axis.vertical
+        ? RotatedBox(quarterTurns: 3, child: slider)
+        : slider;
   }
 
   int? get _nextChapterId {
@@ -849,28 +977,36 @@ abstract class _ComicReaderState extends State<_ComicReader>
       await _navigate(next);
     } else if (mounted) {
       defaultToast(
-          context, context.l10n.tr('已经到头了', en: 'You have reached the end'));
+        context,
+        context.l10n.tr('已经到头了', en: 'You have reached the end'),
+      );
     }
   }
 
   Widget _buildNextEp() => Padding(
-      padding: EdgeInsets.only(
-          bottom: !_fullScreen &&
-                  currentReaderSliderPosition == ReaderSliderPosition.bottom
-              ? 45 + MediaQuery.viewPaddingOf(context).bottom
-              : 0),
-      child: SizedBox(
-          height: 100,
-          child: Center(
-            child: TextButton(
-              onPressed: _nextChapterId != null
-                  ? _onNextAction
-                  : () => Navigator.maybePop(context),
-              child: Text(_nextChapterId != null
-                  ? context.l10n.tr('下一章', en: 'Next chapter')
-                  : context.l10n.tr('结束阅读', en: 'Finish reading')),
-            ),
-          )));
+    padding: EdgeInsets.only(
+      bottom:
+          !_fullScreen &&
+              currentReaderSliderPosition == ReaderSliderPosition.bottom
+          ? 48 + MediaQuery.viewPaddingOf(context).bottom
+          : 0,
+    ),
+    child: SizedBox(
+      height: 100,
+      child: Center(
+        child: TextButton(
+          onPressed: _nextChapterId != null
+              ? _onNextAction
+              : () => Navigator.maybePop(context),
+          child: Text(
+            _nextChapterId != null
+                ? context.l10n.tr('下一章', en: 'Next chapter')
+                : context.l10n.tr('结束阅读', en: 'Finish reading'),
+          ),
+        ),
+      ),
+    ),
+  );
 
   List<Series> get _series => widget.chapter.series.isEmpty
       ? widget.fallbackSeries
@@ -884,9 +1020,13 @@ abstract class _ComicReaderState extends State<_ComicReader>
         context: context,
         backgroundColor: const Color(0xDD000000),
         builder: (_) => SizedBox(
-            height: MediaQuery.sizeOf(context).height * .45,
-            child: _EpChooser(widget.chapter, (id, _) => _navigate(id),
-                series: _series)),
+          height: MediaQuery.sizeOf(context).height * .45,
+          child: _EpChooser(
+            widget.chapter,
+            (id, _) => _navigate(id),
+            series: _series,
+          ),
+        ),
       );
     } catch (error) {
       debugPrient('reader chapter chooser failed: ${error.runtimeType}');
@@ -900,11 +1040,13 @@ abstract class _ComicReaderState extends State<_ComicReader>
     _modalInFlight = true;
     try {
       await showMaterialModalBottomSheet(
-          context: context,
-          backgroundColor: const Color(0xDD000000),
-          builder: (_) => SizedBox(
-              height: MediaQuery.sizeOf(context).height / 2,
-              child: _SettingPanel()));
+        context: context,
+        backgroundColor: const Color(0xDD000000),
+        builder: (_) => SizedBox(
+          height: MediaQuery.sizeOf(context).height / 2,
+          child: _SettingPanel(),
+        ),
+      );
     } catch (error) {
       debugPrient('reader settings failed: ${error.runtimeType}');
       return;
@@ -919,6 +1061,7 @@ abstract class _ComicReaderState extends State<_ComicReader>
       await widget.reload(_current, _fullScreen);
     } else {
       setState(() {});
+      _preloadAround(_current);
     }
   }
 }

@@ -15,6 +15,10 @@ Local changes are confined to `lib/src/zoomable_positioned_list.dart`:
   `reverse` is true (including double-tap focal-point preservation).
 - Clamp programmatic zoom offsets to the actual scroll extents instead of an
   assumed zero minimum; indexed lists may legitimately have negative offsets.
+- Add an optional exact `cacheExtent` override while preserving the upstream
+  default. The reader sets this to zero because it owns page-count preloading;
+  otherwise the upstream two-screen minimum fetches offscreen images even when
+  preloading is disabled.
 
 Regression coverage is in `test/reader_regression_test.dart` and is run on both
 the Flutter widget harness and Android. Keeping this small patch in a pinned

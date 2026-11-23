@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -6,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jmcomic3/screens/components/images.dart';
+import 'package:jmcomic3/basic/image_decode_targets.dart';
+import 'package:jmcomic3/basic/page_image_provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +17,7 @@ void main() {
   late File file;
   var pageCalls = 0;
   var sizeCalls = 0;
+  Completer<void>? sizeGate;
 
   setUp(() async {
     clearAllImageMemoryCaches();
@@ -21,6 +25,7 @@ void main() {
     imageCache.clearLiveImages();
     pageCalls = 0;
     sizeCalls = 0;
+    sizeGate = null;
     directory = await Directory.systemTemp.createTemp('jm3-page-cache-');
     file = File('${directory.path}/page.png');
     final recorder = ui.PictureRecorder();
@@ -33,25 +38,27 @@ void main() {
     picture.dispose();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      final payload = jsonDecode(call.arguments as String) as Map;
-      Object response;
-      switch (payload['method']) {
-        case 'jm_page_image':
-          pageCalls++;
-          response = file.path;
-          break;
-        case 'image_size':
-          sizeCalls++;
-          response = jsonEncode({'w': 120, 'h': 180});
-          break;
-        default:
-          throw StateError('Unexpected method: ${payload['method']}');
-      }
-      return jsonEncode({'error_message': '', 'response_data': response});
-    });
+          final payload = jsonDecode(call.arguments as String) as Map;
+          Object response;
+          switch (payload['method']) {
+            case 'jm_page_image':
+              pageCalls++;
+              response = file.path;
+              break;
+            case 'image_size':
+              sizeCalls++;
+              if (sizeGate != null) await sizeGate!.future;
+              response = jsonEncode({'w': 120, 'h': 180});
+              break;
+            default:
+              throw StateError('Unexpected method: ${payload['method']}');
+          }
+          return jsonEncode({'error_message': '', 'response_data': response});
+        });
   });
 
   tearDown(() async {
+    if (sizeGate != null && !sizeGate!.isCompleted) sizeGate!.complete();
     clearAllImageMemoryCaches();
     imageCache.clear();
     imageCache.clearLiveImages();
@@ -65,29 +72,32 @@ void main() {
     double width = 120,
     double height = 180,
   }) async {
-    await tester.pumpWidget(MaterialApp(
-      home: MediaQuery(
-        data: const MediaQueryData(devicePixelRatio: 1),
-        child: Center(
-          child: JMPageImage(
-            42,
-            'page.png',
-            width: width,
-            height: height,
-            onTrueSize: (_) {},
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(devicePixelRatio: 1),
+          child: Center(
+            child: JMPageImage(
+              42,
+              'page.png',
+              width: width,
+              height: height,
+              onTrueSize: (_) {},
+            ),
           ),
         ),
       ),
-    ));
+    );
     // 使用真实文件解码；异步 I/O 在真实时钟中完成，避免只测试缓存键的字符串匹配。
     await tester.runAsync(() async {
       final expectedProvider = ResizeImage.resizeIfNeeded(
-        decodeTargetExtentForTest(width, 1),
-        decodeTargetExtentForTest(height, 1),
+        imageDecodeTargetExtent(width, 1),
+        imageDecodeTargetExtent(height, 1),
         FileImage(file),
       );
-      final expectedKey =
-          await expectedProvider.obtainKey(ImageConfiguration.empty);
+      final expectedKey = await expectedProvider.obtainKey(
+        ImageConfiguration.empty,
+      );
       for (var attempt = 0; attempt < 50; attempt++) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
         await tester.pump();
@@ -107,8 +117,9 @@ void main() {
     return key;
   }
 
-  testWidgets('page eviction removes actual resized file cache variants',
-      (tester) async {
+  testWidgets('page eviction removes actual resized file cache variants', (
+    tester,
+  ) async {
     final largeKey = await mountPage(tester);
     // Use distinct codec buckets rather than two sizes that both map to 256.
     final smallKey = await mountPage(tester, width: 300, height: 450);
@@ -125,8 +136,9 @@ void main() {
     expect(pageCalls, 1);
   });
 
-  testWidgets('page eviction preserves the currently displayed image',
-      (tester) async {
+  testWidgets('page eviction preserves the currently displayed image', (
+    tester,
+  ) async {
     final key = await mountPage(tester);
     expect(imageCache.statusForKey(key).live, isTrue);
     evictPageImageDecodeCache(42, 'page.png');
@@ -140,8 +152,9 @@ void main() {
     expect(imageCache.statusForKey(key).live, isFalse);
   });
 
-  testWidgets('page memory eviction reloads path and size on the next visit',
-      (tester) async {
+  testWidgets('page memory eviction reloads path and size on the next visit', (
+    tester,
+  ) async {
     final key = await mountPage(tester);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
@@ -152,4 +165,58 @@ void main() {
     expect(sizeCalls, 2);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+    'preloaded provider paints while image dimensions are still pending',
+    (tester) async {
+      sizeGate = Completer<void>();
+      final provider = PageImageProvider(42, 'page.png', pageIndex: 0);
+      late BuildContext imageContext;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              imageContext = context;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      await tester.runAsync(() => precacheImage(provider, imageContext));
+      await tester.pump();
+      expect(imageCache.statusForKey(provider).keepAlive, isTrue);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: JMPageImage(
+              42,
+              'page.png',
+              pageIndex: 0,
+              provider: provider,
+              width: 120,
+              height: 180,
+              onTrueSize: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.runAsync(() async {
+        for (var attempt = 0; attempt < 50; attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          await tester.pump();
+          if (find.byType(RawImage).evaluate().isNotEmpty &&
+              tester.widget<RawImage>(find.byType(RawImage)).image != null)
+            break;
+        }
+      });
+      expect(tester.widget<Image>(find.byType(Image)).image, provider);
+      expect(tester.widget<RawImage>(find.byType(RawImage)).image, isNotNull);
+      expect(pageCalls, 1);
+      expect(sizeCalls, 1);
+      expect(sizeGate!.isCompleted, isFalse);
+      sizeGate!.complete();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }

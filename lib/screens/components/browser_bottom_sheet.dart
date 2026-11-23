@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import 'package:jmcomic3/basic/log.dart';
 import 'package:jmcomic3/configs/auto_clean.dart';
 import 'package:jmcomic3/configs/network_api_host.dart';

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/dialogs.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import 'package:jmcomic3/basic/log.dart';
 import 'package:jmcomic3/basic/methods.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
-import 'package:jmcomic3/screens/components/images.dart';
+import 'package:jmcomic3/basic/page_image_provider.dart';
 
 import 'int_property.dart';
 
@@ -130,11 +131,23 @@ Future<void> chooseAutoClean(BuildContext context) async {
     );
   } else {
     defaultToast(
-        context, context.l10n.tr('已关闭自动清理', en: 'Auto clean disabled'));
+      context,
+      context.l10n.tr('已关闭自动清理', en: 'Auto clean disabled'),
+    );
   }
 }
 
 Future<void> runAutoCleanIfNeeded() async {
+  try {
+    await _runAutoCleanIfNeeded();
+  } catch (error) {
+    // This task is launched without awaiting it during startup. A property-read
+    // failure must not escape as an unhandled asynchronous application error.
+    debugPrient('auto clean scheduling failed: ${error.runtimeType}');
+  }
+}
+
+Future<void> _runAutoCleanIfNeeded() async {
   if (_cleaning) {
     return;
   }

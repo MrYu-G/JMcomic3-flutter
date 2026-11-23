@@ -16,6 +16,47 @@ const List<String> _listPayloadKeys = <String>[
 
 final Object _missingListPayload = Object();
 
+/// Native responses keep both envelope fields as strings, including errors.
+/// Decode only the envelope here; method-specific nesting stays below.
+String decodeInvokeResponse(String response) {
+  final decoded = jsonDecode(_stripJsonBom(response));
+  if (decoded is! Map) {
+    throw FormatException(
+      'Unexpected invoke response shape: ${decoded.runtimeType}',
+    );
+  }
+  final error = decoded['error_message'];
+  final data = decoded['response_data'];
+  if (error is! String || data is! String) {
+    throw const FormatException(
+      'Unexpected invoke response payload: expect string fields',
+    );
+  }
+  if (error.isNotEmpty) throw StateError(error);
+  return _stripJsonBom(data);
+}
+
+/// Keep scalar compatibility for legacy quoted integer/decimal responses.
+int decodeBackendInt(String raw, {required int fallback}) {
+  final trimmed = raw.trim();
+  final parsed = int.tryParse(trimmed);
+  if (parsed != null) return parsed;
+  try {
+    final decoded = jsonDecode(trimmed);
+    if (decoded is String) {
+      final integer = int.tryParse(decoded.trim());
+      if (integer != null) return integer;
+    }
+    final value = decoded is String ? num.tryParse(decoded.trim()) : decoded;
+    if (value is num && value.isFinite && value == value.truncateToDouble()) {
+      return value.toInt();
+    }
+  } on FormatException {
+    // Callers explicitly supply their established safe default.
+  }
+  return fallback;
+}
+
 String _stripJsonBom(String input) {
   // Some HTTP clients preserve the UTF-8 BOM at the JSON boundary. Remove it
   // only when it is the first character; BOM-like text inside a value is data.
@@ -58,9 +99,11 @@ bool _looksLikeJsonValue(String input) {
 
 dynamic _decodeBridgePayload(String rsp) {
   dynamic decoded = jsonDecode(_stripJsonBom(rsp));
-  for (var depth = 0;
-      decoded is String && depth < _maxBridgePayloadStringUnwrapDepth;
-      depth++) {
+  for (
+    var depth = 0;
+    decoded is String && depth < _maxBridgePayloadStringUnwrapDepth;
+    depth++
+  ) {
     final nested = _stripJsonBom(decoded.trim());
     if (!_looksLikeJsonValue(nested)) {
       return decoded;
@@ -199,11 +242,7 @@ T decodeEntityResponse<T>(
   bool immutableItem = false,
   bool nullAsEmpty = false,
 }) {
-  final map = decodeMapResponse(
-    rsp,
-    method,
-    nullAsEmpty: nullAsEmpty,
-  );
+  final map = decodeMapResponse(rsp, method, nullAsEmpty: nullAsEmpty);
   if (immutableItem) {
     return mapper(Map<String, dynamic>.unmodifiable(map));
   }

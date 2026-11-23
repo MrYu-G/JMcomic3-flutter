@@ -1,6 +1,5 @@
 plugins {
     id 'com.android.application'
-    id 'kotlin-android'
     id 'dev.flutter.flutter-gradle-plugin'
 }
 
@@ -34,6 +33,10 @@ if (flutterVersionName == null) {
 }
 
 def rustAndroidTrackedAbis = ['arm64-v8a', 'armeabi-v7a']
+def rustAndroidTargetAbi = ['android-arm64': 'arm64-v8a', 'android-arm': 'armeabi-v7a']
+def rustAndroidRequestedAbis = (project.findProperty('target-platform')?.toString()?.split(',') ?: [])
+        .collect { rustAndroidTargetAbi[it.trim()] }.findAll { it != null }.unique()
+def rustAndroidReleaseAbis = rustAndroidRequestedAbis ?: rustAndroidTrackedAbis
 def rustAndroidDestLibName = 'librust.so'
 def rustAndroidDefaultSourceLibName = 'librust_lib_jasmine.so'
 def rustAndroidAbiMetadata = [
@@ -45,7 +48,8 @@ def rustAndroidAbiMetadata = [
 
 android {
     namespace "com.jmcomic3.yee"
-    compileSdkVersion flutter.compileSdkVersion
+    // permission_handler 13 requires Android API 37.
+    compileSdkVersion 37
     // Keep the Android NDK aligned with the Rust cargo-ndk toolchain that is
     // pinned by the local build environment (D:\\Cat\\jm3). Following
     // Flutter's moving default here can select an uninstalled/malformed NDK.
@@ -54,10 +58,6 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = '17'
     }
 
     sourceSets {
@@ -96,7 +96,7 @@ android {
             if (!project.findProperty('split-per-abi')?.toString()?.toBoolean()) {
                 ndk {
                     abiFilters.clear()
-                    abiFilters.addAll(rustAndroidTrackedAbis)
+                    abiFilters.addAll(rustAndroidReleaseAbis)
                 }
             }
             if (hasReleaseSigning) {
@@ -109,6 +109,12 @@ android {
                     'proguard-rules.pro'
             )
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 
@@ -349,22 +355,18 @@ tasks.register('checkRustJniLibsTrackedSet') {
         def trackedPaths = rustAndroidTrackedAbis.collect {
             "android/app/src/main/jniLibs/${it}/${rustAndroidDestLibName}"
         }
-        def stdout = new ByteArrayOutputStream()
-        def stderr = new ByteArrayOutputStream()
-        def result = exec {
+        def gitStatus = providers.exec {
             workingDir rustAndroidRepoRoot
             commandLine(['git', 'status', '--porcelain', '--untracked-files=no', '--'] + trackedPaths)
-            standardOutput = stdout
-            errorOutput = stderr
             ignoreExitValue = true
         }
-        if (result.exitValue != 0) {
-            logger.lifecycle("Skipping Android Rust JNI git-change check because git status failed: ${stderr.toString('UTF-8').trim()}")
+        if (gitStatus.result.get().exitValue != 0) {
+            logger.lifecycle("Skipping Android Rust JNI git-change check because git status failed: ${gitStatus.standardError.asText.get().trim()}")
             return
         }
 
         def changedAbis = [] as Set
-        stdout.toString('UTF-8').readLines().each { line ->
+        gitStatus.standardOutput.asText.get().readLines().each { line ->
             def changedPath = line.length() > 3 ? line.substring(3).trim().replace('\\', '/') : ''
             rustAndroidTrackedAbis.each { abi ->
                 if (changedPath.endsWith("android/app/src/main/jniLibs/${abi}/${rustAndroidDestLibName}")) {
@@ -395,4 +397,19 @@ tasks.matching { it.name == 'preBuild' }.configureEach {
 }
 tasks.matching { it.name ==~ /merge.*JniLibFolders/ }.configureEach {
     dependsOn('validateRustJniLibs')
+}
+
+androidComponents {
+    onVariants(selector().withBuildType('release')) { variant ->
+        // Flutter adds every platform ABI to defaultConfig.ndk.abiFilters and
+        // AGP merges that with the release filter above, so the tracked
+        // emulator library would still be packaged. Exclude unrequested ABIs.
+        (['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'] - rustAndroidReleaseAbis).each { abi ->
+            variant.packaging.jniLibs.excludes.add("lib/${abi}/**".toString())
+        }
+        // Store native libraries compressed. Release packages are downloaded
+        // directly rather than through a store that compresses them, so this
+        // roughly halves the download; Android extracts them at install time.
+        variant.packaging.jniLibs.useLegacyPackaging.set(true)
+    }
 }

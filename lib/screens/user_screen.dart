@@ -58,51 +58,22 @@ class _UserScreenState extends State<UserScreen>
     return Scaffold(
       backgroundColor: dark ? const Color(0xFF0F1319) : null,
       appBar: AppBar(
-          title: Text(context.l10n.profile),
-          titleTextStyle:
-              Theme.of(context).appBarTheme.titleTextStyle?.copyWith(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                  ),
-          actions: [
-            if (!normalPlatform)
-              IconButton(
-                tooltip: 'Pro',
-                onPressed: () {
-                  Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (BuildContext context) {
-                    return const ProOhScreen();
-                  }));
-                },
-                icon: Icon(
-                  hasProAccess
-                      ? Icons.offline_bolt
-                      : Icons.offline_bolt_outlined,
-                ),
-              ),
-            if (normalPlatform)
-              IconButton(
-                tooltip: 'Pro',
-                onPressed: () {
-                  Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (BuildContext context) {
-                    return const ProScreen();
-                  }));
-                },
-                icon: Icon(
-                  hasProAccess
-                      ? Icons.offline_bolt
-                      : Icons.offline_bolt_outlined,
-                ),
-              ),
-            _buildSettingsIcon(),
-            if (normalPlatform) _buildAboutIcon(),
-          ]),
+        title: Text(context.l10n.profile),
+        titleTextStyle: Theme.of(context).appBarTheme.titleTextStyle
+            ?.copyWith(fontSize: 17, fontWeight: FontWeight.w600),
+        actions: MediaQuery.sizeOf(context).width < 600
+            ? [
+                _buildProIcon(),
+                _buildSettingsIcon(),
+                if (normalPlatform) _buildAboutIcon(),
+              ]
+            : null,
+      ),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 840;
-            final spacing = constraints.maxWidth >= 600 ? 24.0 : 16.0;
+            final spacing = constraints.maxWidth >= 600 ? 20.0 : 12.0;
             return SingleChildScrollView(
               child: Center(
                 child: ConstrainedBox(
@@ -147,9 +118,8 @@ class _UserScreenState extends State<UserScreen>
           padding: const EdgeInsets.only(bottom: 12),
           child: Text(
             context.l10n.navLibrary,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                ),
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w500),
           ),
         ),
         LayoutBuilder(
@@ -172,9 +142,7 @@ class _UserScreenState extends State<UserScreen>
         ),
         const Padding(
           padding: EdgeInsets.only(top: 12),
-          child: RecommendLinksPanel(
-            padding: EdgeInsets.zero,
-          ),
+          child: RecommendLinksPanel(padding: EdgeInsets.zero),
         ),
       ],
     );
@@ -224,9 +192,7 @@ class _UserScreenState extends State<UserScreen>
         ),
         const Padding(
           padding: EdgeInsets.only(top: 12),
-          child: RecommendLinksPanel(
-            padding: EdgeInsets.zero,
-          ),
+          child: RecommendLinksPanel(padding: EdgeInsets.zero),
         ),
       ],
     );
@@ -245,8 +211,8 @@ class _UserScreenState extends State<UserScreen>
     return InkWell(
       onTap: onTap,
       child: Container(
-        constraints: const BoxConstraints(minHeight: 60),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        constraints: const BoxConstraints(minHeight: 52),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           border: Border(
             bottom: last ? BorderSide.none : BorderSide(color: dividerColor),
@@ -254,8 +220,8 @@ class _UserScreenState extends State<UserScreen>
         ),
         child: Row(
           children: [
-            Icon(icon, color: iconColor ?? colors.onSurfaceVariant, size: 23),
-            const SizedBox(width: 14),
+            Icon(icon, color: iconColor ?? colors.onSurfaceVariant, size: 22),
+            const SizedBox(width: 12),
             Expanded(
               child: Text(
                 title,
@@ -291,9 +257,9 @@ class _UserScreenState extends State<UserScreen>
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(icon, size: 36, color: theme.colorScheme.primary),
+            Icon(icon, size: 32, color: theme.colorScheme.primary),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -319,7 +285,7 @@ class _UserScreenState extends State<UserScreen>
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         action,
       ],
     );
@@ -361,18 +327,28 @@ class _UserScreenState extends State<UserScreen>
     }
     return Container(
       key: const ValueKey('profile-account-card'),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: _cardBorderColor),
       ),
-      child: child,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          child,
+          if (MediaQuery.sizeOf(context).width >= 600) ...[
+            const SizedBox(height: 12),
+            Center(child: _buildUtilityGroup()),
+          ],
+        ],
+      ),
     );
   }
 
   Widget _buildLoginButton(String title) {
     return FilledButton.icon(
+      style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
       onPressed: () async {
         await loginDialog(context);
       },
@@ -400,6 +376,7 @@ class _UserScreenState extends State<UserScreen>
 
   Widget _buildLoginErrorButton() {
     return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
       onPressed: () async {
         await showDialog(
           context: context,
@@ -589,7 +566,9 @@ class _UserScreenState extends State<UserScreen>
             final inline = constraints.maxWidth / textScale >= 315;
             final emailDetail = _buildProfileDetail(context.l10n.email, email);
             final genderDetail = _buildProfileDetail(
-                context.l10n.gender, _formatGender(selfInfo.gender));
+              context.l10n.gender,
+              _formatGender(selfInfo.gender),
+            );
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -640,10 +619,8 @@ class _UserScreenState extends State<UserScreen>
       ),
       child: Text(
         value,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: foreground,
-              fontWeight: FontWeight.w400,
-            ),
+        style: Theme.of(context).textTheme.labelSmall
+            ?.copyWith(color: foreground, fontWeight: FontWeight.w400),
       ),
     );
   }
@@ -656,16 +633,16 @@ class _UserScreenState extends State<UserScreen>
     final error = dailySignStatus == DailySignStatus.error;
     final statusColor = signed
         ? (theme.brightness == Brightness.dark
-            ? const Color(0xFF5CD49A)
-            : Colors.green.shade700)
+              ? const Color(0xFF5CD49A)
+              : Colors.green.shade700)
         : error
-            ? colors.error
-            : colors.onSurfaceVariant;
+        ? colors.error
+        : colors.onSurfaceVariant;
     final label = signed
         ? dailySignStatusLabel(context)
         : checking
-            ? context.l10n.signing
-            : context.l10n.manualSign;
+        ? context.l10n.signing
+        : context.l10n.manualSign;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -677,7 +654,7 @@ class _UserScreenState extends State<UserScreen>
                   await checkDailySignStatus(context, toast: true);
                 },
           style: FilledButton.styleFrom(
-            minimumSize: const Size(0, 40),
+            minimumSize: const Size(48, 48),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             backgroundColor: colors.onSurface.withValues(alpha: .05),
             disabledBackgroundColor: colors.onSurface.withValues(alpha: .05),
@@ -691,12 +668,13 @@ class _UserScreenState extends State<UserScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                  signed
-                      ? Icons.check
-                      : checking
-                          ? Icons.sync
-                          : Icons.check_circle_outline,
-                  size: 17),
+                signed
+                    ? Icons.check
+                    : checking
+                    ? Icons.sync
+                    : Icons.event_available_outlined,
+                size: 17,
+              ),
               const SizedBox(width: 5),
               Flexible(child: Text(label, textAlign: TextAlign.center)),
             ],
@@ -716,11 +694,11 @@ class _UserScreenState extends State<UserScreen>
 
   Widget _buildProfileDivider() {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Divider(
         height: 1,
-        color:
-            Theme.of(context).colorScheme.outlineVariant.withValues(alpha: .22),
+        color: Theme.of(context).colorScheme.outlineVariant
+            .withValues(alpha: .22),
       ),
     );
   }
@@ -741,14 +719,18 @@ class _UserScreenState extends State<UserScreen>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label,
-            textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall,
+        ),
         const SizedBox(height: 5),
         Text(
           value,
           textAlign: TextAlign.center,
-          style:
-              theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w500),
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w500,
+          ),
         ),
         if (progress != null) ...[
           const SizedBox(height: 8),
@@ -782,12 +764,17 @@ class _UserScreenState extends State<UserScreen>
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label,
-                  style: style?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant)),
+              Text(
+                label,
+                style: style?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
               const SizedBox(height: 3),
-              Text(value,
-                  style: style?.copyWith(color: theme.colorScheme.onSurface)),
+              Text(
+                value,
+                style: style?.copyWith(color: theme.colorScheme.onSurface),
+              ),
             ],
           );
         }
@@ -796,14 +783,19 @@ class _UserScreenState extends State<UserScreen>
           children: [
             SizedBox(
               width: labelWidth,
-              child: Text(label,
-                  style: style?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant)),
+              child: Text(
+                label,
+                style: style?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(value,
-                  style: style?.copyWith(color: theme.colorScheme.onSurface)),
+              child: Text(
+                value,
+                style: style?.copyWith(color: theme.colorScheme.onSurface),
+              ),
             ),
           ],
         );
@@ -860,7 +852,7 @@ class _UserScreenState extends State<UserScreen>
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
             children: [
               DecoratedBox(
@@ -869,8 +861,8 @@ class _UserScreenState extends State<UserScreen>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Icon(icon, color: colors.primary, size: 24),
+                  padding: const EdgeInsets.all(8),
+                  child: Icon(icon, color: colors.primary, size: 22),
                 ),
               ),
               const SizedBox(width: 12),
@@ -883,8 +875,11 @@ class _UserScreenState extends State<UserScreen>
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(Icons.chevron_right,
-                  color: colors.onSurfaceVariant, size: 20),
+              Icon(
+                Icons.chevron_right,
+                color: colors.onSurfaceVariant,
+                size: 20,
+              ),
             ],
           ),
         ),
@@ -932,60 +927,134 @@ class _UserScreenState extends State<UserScreen>
         !mounted) {
       return;
     }
-    await Navigator.of(context).push(MaterialPageRoute(
-      builder: (BuildContext context) {
-        return const FavoritesScreen();
-      },
-    ));
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (BuildContext context) {
+          return const FavoritesScreen();
+        },
+      ),
+    );
   }
 
   void _openViewLog() {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (BuildContext context) {
-        return const ViewLogScreen();
-      },
-    ));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (BuildContext context) {
+          return const ViewLogScreen();
+        },
+      ),
+    );
   }
 
   void _openDownloads() {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (BuildContext context) {
-        return const DownloadsScreen();
-      },
-    ));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (BuildContext context) {
+          return const DownloadsScreen();
+        },
+      ),
+    );
   }
 
   void _openComments() {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (BuildContext context) {
-        return const CommentsScreen();
-      },
-    ));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (BuildContext context) {
+          return const CommentsScreen();
+        },
+      ),
+    );
   }
 
   Widget _buildSettingsIcon() {
     return IconButton(
+      style: IconButton.styleFrom(fixedSize: const Size(48, 48)),
       tooltip: context.l10n.settings,
       onPressed: () async {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (BuildContext context) {
-            return const SettingsScreen();
-          },
-        ));
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (BuildContext context) {
+              return const SettingsScreen();
+            },
+          ),
+        );
       },
-      icon: const Icon(Icons.settings),
+      icon: const Icon(Icons.settings_outlined),
+    );
+  }
+
+  Widget _buildProIcon() {
+    return IconButton(
+      style: IconButton.styleFrom(fixedSize: const Size(48, 48)),
+      tooltip: context.l10n.tr('Pro 会员', en: 'Pro membership'),
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              normalPlatform ? const ProScreen() : const ProOhScreen(),
+        ),
+      ),
+      icon: Icon(
+        hasProAccess ? Icons.offline_bolt : Icons.offline_bolt_outlined,
+      ),
+    );
+  }
+
+  Widget _buildUtilityGroup() {
+    final colors = Theme.of(context).colorScheme;
+    final items = <Widget>[
+      _buildProIcon(),
+      _buildSettingsIcon(),
+      if (normalPlatform) _buildAboutIcon(),
+    ];
+    return Material(
+      key: const ValueKey('profile-utility-group'),
+      color: colors.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colors.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: IconButtonTheme(
+        data: IconButtonThemeData(
+          style: IconButton.styleFrom(
+            fixedSize: const Size(48, 48),
+            shape: const RoundedRectangleBorder(),
+            iconSize: 21,
+            foregroundColor: colors.onSurfaceVariant,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var index = 0; index < items.length; index++) ...[
+              if (index > 0)
+                SizedBox(
+                  height: 22,
+                  child: VerticalDivider(
+                    width: 1,
+                    color: colors.outlineVariant,
+                  ),
+                ),
+              items[index],
+            ],
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildAboutIcon() {
     return IconButton(
-      tooltip: context.l10n.about,
+      style: IconButton.styleFrom(fixedSize: const Size(48, 48)),
+      tooltip: context.l10n.tr('关于 / 更新', en: 'About / Update'),
       onPressed: () async {
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (BuildContext context) {
-            return const AboutScreen();
-          },
-        ));
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (BuildContext context) {
+              return const AboutScreen();
+            },
+          ),
+        );
       },
       icon: const VersionBadged(
         child: Padding(

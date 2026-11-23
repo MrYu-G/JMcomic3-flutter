@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jmcomic3/basic/entities.dart';
+import 'package:jmcomic3/basic/page_image_provider.dart';
 import 'package:jmcomic3/configs/ignore_view_log.dart';
 import 'package:jmcomic3/configs/no_animation.dart';
 import 'package:jmcomic3/configs/reader_controller_type.dart';
@@ -15,9 +17,11 @@ import 'package:jmcomic3/configs/volume_key_control.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 import 'package:jmcomic3/screens/comic_reader_screen.dart';
 
+import 'synthetic_png.dart';
+
 const _methodsChannel = MethodChannel('methods');
 
-Future<void> _initReaderConfigForTest() async {
+Future<void> _initReaderConfigForTest(String imagePath) async {
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   messenger.setMockMethodCallHandler(_methodsChannel, (call) async {
@@ -29,14 +33,13 @@ Future<void> _initReaderConfigForTest() async {
     final method = request['method'];
     var responseData = '';
     if (method == 'jm_page_image') {
-      responseData = 'images/ic.png';
+      responseData = imagePath;
+    } else if (method == 'begin_reader_session') {
+      responseData = 'fixture-reader-session';
     } else if (method == 'image_size') {
       responseData = jsonEncode({'w': 1, 'h': 1});
     }
-    return jsonEncode({
-      'error_message': '',
-      'response_data': responseData,
-    });
+    return jsonEncode({'error_message': '', 'response_data': responseData});
   });
 
   // These preferences are normally loaded by InitScreen before a reader is
@@ -53,26 +56,28 @@ Future<void> _initReaderConfigForTest() async {
 }
 
 ComicBasic _comic() => ComicBasic(
-      id: 1,
-      author: 'author',
-      description: '',
-      name: 'Test comic',
-      image: '',
-    );
+  id: 1,
+  author: 'author',
+  description: '',
+  name: 'Test comic',
+  image: '',
+);
 
 ChapterResponse _chapter({List<String> images = const []}) => ChapterResponse(
-      id: 10,
-      series: [Series(id: 10, name: 'Chapter', sort: '1')],
-      tags: '',
-      name: 'Chapter',
-      images: images,
-      seriesId: 10,
-      isFavorite: false,
-      liked: false,
-    );
+  id: 10,
+  series: [Series(id: 10, name: 'Chapter', sort: '1')],
+  tags: '',
+  name: 'Chapter',
+  images: images,
+  seriesId: 10,
+  isFavorite: false,
+  liked: false,
+);
 
-Widget _reader(Future<ChapterResponse> Function(int) loader,
-    {int initRank = 0}) {
+Widget _reader(
+  Future<ChapterResponse> Function(int) loader, {
+  int initRank = 0,
+}) {
   return MaterialApp(
     locale: const Locale('en'),
     localizationsDelegates: const [AppLocalizations.delegate],
@@ -88,19 +93,26 @@ Widget _reader(Future<ChapterResponse> Function(int) loader,
 }
 
 void main() {
-  setUpAll(_initReaderConfigForTest);
-  tearDownAll(() async {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(_methodsChannel, null);
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() async {
+    final directory = await Directory.systemTemp.createTemp('jm3-widgets-');
+    addTearDown(() async {
+      clearAllImageMemoryCaches();
+      imageCache.clear();
+      imageCache.clearLiveImages();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(_methodsChannel, null);
+      await directory.delete(recursive: true);
+    });
+    final image = File('${directory.path}/page.png');
+    await writeSyntheticPng(image, width: 1, height: 1);
+    await _initReaderConfigForTest(image.path);
   });
 
   testWidgets('Basic widget smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: Text('JMcomic'),
-        ),
-      ),
+      const MaterialApp(home: Scaffold(body: Text('JMcomic'))),
     );
 
     expect(find.text('JMcomic'), findsOneWidget);
@@ -114,8 +126,9 @@ void main() {
     expect(find.text('Retry'), findsOneWidget);
   });
 
-  testWidgets('chapter loader errors render content error state',
-      (tester) async {
+  testWidgets('chapter loader errors render content error state', (
+    tester,
+  ) async {
     await tester.pumpWidget(_reader((_) async => throw StateError('offline')));
     await tester.pumpAndSettle();
 
@@ -123,20 +136,25 @@ void main() {
     expect(find.textContaining('offline'), findsOneWidget);
   });
 
-  testWidgets('initial rank outside chapter bounds does not crash reader',
-      (tester) async {
-    await tester.pumpWidget(_reader(
+  testWidgets('initial rank outside chapter bounds does not crash reader', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _reader(
         (_) async =>
             _chapter(images: const ['https://example.invalid/page.jpg']),
-        initRank: 99));
+        initRank: 99,
+      ),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('reused reader state resets chapter generation safely',
-      (tester) async {
+  testWidgets('reused reader state resets chapter generation safely', (
+    tester,
+  ) async {
     final loaded = <int>[];
     Future<ChapterResponse> loader(int id) async {
       loaded.add(id);
@@ -145,7 +163,7 @@ void main() {
         series: [Series(id: id, name: 'Chapter $id', sort: '$id')],
         tags: '',
         name: 'Chapter $id',
-        images: const ['images/ic.png'],
+        images: const ['page.png'],
         seriesId: id,
         isFavorite: false,
         liked: false,
@@ -177,35 +195,39 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('next chapter uses entry series when chapter response omits it',
-      (tester) async {
+  testWidgets('next chapter uses entry series when chapter response omits it', (
+    tester,
+  ) async {
     final loaded = <int>[];
-    await tester.pumpWidget(MaterialApp(
-      locale: const Locale('en'),
-      localizationsDelegates: const [AppLocalizations.delegate],
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: ComicReaderScreen(
-        comic: _comic(),
-        series: [
-          Series(id: 10, name: 'First', sort: '1'),
-          Series(id: 20, name: 'Second', sort: '2')
-        ],
-        chapterId: 10,
-        initRank: 0,
-        loadChapter: (id) async {
-          loaded.add(id);
-          return ChapterResponse(
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: const [AppLocalizations.delegate],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ComicReaderScreen(
+          comic: _comic(),
+          series: [
+            Series(id: 10, name: 'First', sort: '1'),
+            Series(id: 20, name: 'Second', sort: '2'),
+          ],
+          chapterId: 10,
+          initRank: 0,
+          loadChapter: (id) async {
+            loaded.add(id);
+            return ChapterResponse(
               id: id,
               series: [],
               tags: '',
               name: 'Chapter $id',
-              images: const ['images/ic.png'],
+              images: const ['page.png'],
               seriesId: 1,
               isFavorite: false,
-              liked: false);
-        },
+              liked: false,
+            );
+          },
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.skip_next_outlined));
     await tester.pumpAndSettle();

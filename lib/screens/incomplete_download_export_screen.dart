@@ -5,23 +5,26 @@ import 'package:jmcomic3/basic/log.dart';
 import 'package:jmcomic3/basic/methods.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 
-import '../basic/commons.dart';
+import 'package:jmcomic3/screens/components/file_actions.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
+
 import '../configs/export_path.dart';
 import '../configs/is_pro.dart';
 import 'components/content_loading.dart';
 import 'components/right_click_pop.dart';
 
-class DownloadsExportingScreen2 extends StatefulWidget {
+class IncompleteDownloadExportScreen extends StatefulWidget {
   final List<int> idList;
 
-  const DownloadsExportingScreen2({Key? key, required this.idList})
-      : super(key: key);
+  const IncompleteDownloadExportScreen({Key? key, required this.idList})
+    : super(key: key);
 
   @override
-  State<StatefulWidget> createState() => _DownloadsExportingScreen2State();
+  State<StatefulWidget> createState() => _IncompleteDownloadExportScreenState();
 }
 
-class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
+class _IncompleteDownloadExportScreenState
+    extends State<IncompleteDownloadExportScreen> {
   bool exporting = false;
   bool exported = false;
   bool exportFail = false;
@@ -31,8 +34,9 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
 
   Widget _body() {
     final l10n = context.l10n;
-    final proSuffix =
-        !hasProAccess ? '\n${l10n.tr('(发电后使用)', en: '(Pro required)')}' : '';
+    final proSuffix = !hasProAccess
+        ? '\n${l10n.tr('(发电后使用)', en: '(Pro required)')}'
+        : '';
     if (exporting) {
       return ContentLoading(
         label: exportMessage.isEmpty
@@ -76,9 +80,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
           onPressed: _exportJpegs,
           child: Text(
             l10n.tr('导出成文件夹', en: 'Export as folders') + proSuffix,
-            style: TextStyle(
-              color: !hasProAccess ? Colors.grey : null,
-            ),
+            style: TextStyle(color: !hasProAccess ? Colors.grey : null),
             textAlign: TextAlign.center,
           ),
         ),
@@ -87,9 +89,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
           onPressed: _exportPdf2,
           child: Text(
             l10n.tr('导出成PDF', en: 'Export as PDF') + proSuffix,
-            style: TextStyle(
-              color: !hasProAccess ? Colors.grey : null,
-            ),
+            style: TextStyle(color: !hasProAccess ? Colors.grey : null),
             textAlign: TextAlign.center,
           ),
         ),
@@ -98,9 +98,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
           onPressed: _exportEpub,
           child: Text(
             l10n.tr('导出成EPUB', en: 'Export as EPUB') + proSuffix,
-            style: TextStyle(
-              color: !hasProAccess ? Colors.grey : null,
-            ),
+            style: TextStyle(color: !hasProAccess ? Colors.grey : null),
             textAlign: TextAlign.center,
           ),
         ),
@@ -155,11 +153,8 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
 
   Future<void> _exportJpegs() {
     return _runBatchExport(
-      exporter: (path) => methods.export_jm_jpegs(
-        widget.idList,
-        path,
-        deleteExport,
-      ),
+      exporter: (path) =>
+          methods.export_jm_jpegs(widget.idList, path, deleteExport),
     );
   }
 
@@ -167,11 +162,7 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
     return _runBatchExport(
       exporter: (path) async {
         for (var id in widget.idList) {
-          await methods.export_jm_pdf2(
-            id,
-            path,
-            deleteExport,
-          );
+          await methods.export_jm_pdf2(id, path, deleteExport);
         }
       },
     );
@@ -179,11 +170,8 @@ class _DownloadsExportingScreen2State extends State<DownloadsExportingScreen2> {
 
   Future<void> _exportEpub() {
     return _runBatchExport(
-      exporter: (path) => methods.export_jm_epub(
-        widget.idList,
-        path,
-        deleteExport,
-      ),
+      exporter: (path) =>
+          methods.export_jm_epub(widget.idList, path, deleteExport),
     );
   }
 

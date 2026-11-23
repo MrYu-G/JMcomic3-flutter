@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jmcomic3/basic/methods.dart';
@@ -9,50 +11,98 @@ void main() {
   Map<String, dynamic> requestOf(MethodCall call) =>
       jsonDecode(call.arguments as String) as Map<String, dynamic>;
   String envelope(String responseData, {String errorMessage = ''}) =>
-      jsonEncode(
-          {'error_message': errorMessage, 'response_data': responseData});
-  tearDown(() => TestDefaultBinaryMessengerBinding
-      .instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(channel, null));
+      jsonEncode({
+        'error_message': errorMessage,
+        'response_data': responseData,
+      });
+  tearDown(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null),
+  );
 
   test('disabled switch falls back to single page', () async {
     final calls = <String>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      expect(call.method, 'invoke');
-      final request = requestOf(call);
-      calls.add(request['method'] as String);
-      if (request['method'] == 'jm_page_image') {
-        return envelope('/safe/p.jpg');
-      }
-      return envelope('');
-    });
-    final result =
-        await methods.jmPageImageBatch([const JmPageImageRequest(1, 'p.jpg')]);
+          expect(call.method, 'invoke');
+          final request = requestOf(call);
+          calls.add(request['method'] as String);
+          if (request['method'] == 'jm_page_image') {
+            return envelope('/safe/p.jpg');
+          }
+          return envelope('');
+        });
+    final result = await methods.jmPageImageBatch([
+      const JmPageImageRequest(1, 'p.jpg'),
+    ]);
     expect(result.single.path, '/safe/p.jpg');
     expect(calls, ['jm_page_image']);
+  });
+
+  test('single fallback is bounded to four and keeps reader session', () async {
+    final pending = <Completer<String>>[];
+    var active = 0;
+    var maximum = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          final request = requestOf(call);
+          expect(request['method'], 'jm_page_image');
+          final params = jsonDecode(request['params'] as String) as Map;
+          expect(params['reader_session'], 'session-test');
+          active++;
+          if (active > maximum) maximum = active;
+          final completer = Completer<String>();
+          pending.add(completer);
+          try {
+            return await completer.future;
+          } finally {
+            active--;
+          }
+        });
+    final result = methods.jmPageImageBatch(
+      List.generate(
+        9,
+        (i) => JmPageImageRequest(42, '$i.jpg', readerSession: 'session-test'),
+      ),
+    );
+    for (var batch = 0; batch < 3; batch++) {
+      await Future<void>.delayed(Duration.zero);
+      final waiting = pending.where((item) => !item.isCompleted).toList();
+      expect(waiting.length, lessThanOrEqualTo(4));
+      for (final item in waiting) {
+        item.complete(envelope('/fixture/page.png'));
+      }
+    }
+    expect(await result, hasLength(9));
+    expect(maximum, 4);
   });
 
   test('batch preserves duplicate ids and chunks at sixteen', () async {
     var batches = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      expect(call.method, 'invoke');
-      final request = requestOf(call);
-      if (request['method'] == 'jm_page_image_batch') {
-        batches++;
-        final params =
-            jsonDecode(request['params'] as String) as Map<String, dynamic>;
-        final pages = params['pages'] as List;
-        return envelope(jsonEncode({
-          'version': 1,
-          'items': pages.map((p) => {'id': p['id'], 'path': '/x'}).toList(),
-        }));
-      }
-      fail('unexpected single fallback');
-    });
+          expect(call.method, 'invoke');
+          final request = requestOf(call);
+          if (request['method'] == 'jm_page_image_batch') {
+            batches++;
+            final params =
+                jsonDecode(request['params'] as String) as Map<String, dynamic>;
+            final pages = params['pages'] as List;
+            return envelope(
+              jsonEncode({
+                'version': 1,
+                'items': pages
+                    .map((p) => {'id': p['id'], 'path': '/x'})
+                    .toList(),
+              }),
+            );
+          }
+          fail('unexpected single fallback');
+        });
     final pages = List.generate(
-        17, (i) => JmPageImageRequest(i == 16 ? 1 : i + 1, '$i.jpg'));
+      17,
+      (i) => JmPageImageRequest(i == 16 ? 1 : i + 1, '$i.jpg'),
+    );
     final result = await methods.jmPageImageBatch(pages, enabled: true);
     expect(result, hasLength(17));
     expect(result.last.id, 1);
@@ -63,80 +113,82 @@ void main() {
     var singles = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      expect(call.method, 'invoke');
-      final request = requestOf(call);
-      if (request['method'] == 'jm_page_image_batch') {
-        return envelope(jsonEncode({'version': 2, 'items': []}));
-      }
-      singles++;
-      final params =
-          jsonDecode(request['params'] as String) as Map<String, dynamic>;
-      return envelope('/safe/${params['image_name']}');
-    });
+          expect(call.method, 'invoke');
+          final request = requestOf(call);
+          if (request['method'] == 'jm_page_image_batch') {
+            return envelope(jsonEncode({'version': 2, 'items': []}));
+          }
+          singles++;
+          final params =
+              jsonDecode(request['params'] as String) as Map<String, dynamic>;
+          return envelope('/safe/${params['image_name']}');
+        });
     final result = await methods.jmPageImageBatch([
       const JmPageImageRequest(1, 'a.jpg'),
-      const JmPageImageRequest(2, 'b.jpg')
+      const JmPageImageRequest(2, 'b.jpg'),
     ], enabled: true);
     expect(result, hasLength(2));
     expect(singles, 2);
     expect(result.any((x) => x.error?.contains('http') ?? false), isFalse);
   });
 
-  test('malformed item is a contract failure and falls back all pages',
-      () async {
-    var batchCalls = 0;
-    var singleCalls = 0;
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-      expect(call.method, 'invoke');
-      final request = requestOf(call);
-      if (request['method'] == 'jm_page_image_batch') {
-        batchCalls++;
-        return envelope(jsonEncode({
-          'version': 1,
-          'items': [
-            {'id': 1, 'path': '/safe/a'},
-            'not-an-object',
-          ],
-        }));
-      }
-      singleCalls++;
-      return envelope('/safe/single');
-    });
-    final result = await methods.jmPageImageBatch(
-      [
+  test(
+    'malformed item is a contract failure and falls back all pages',
+    () async {
+      var batchCalls = 0;
+      var singleCalls = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            expect(call.method, 'invoke');
+            final request = requestOf(call);
+            if (request['method'] == 'jm_page_image_batch') {
+              batchCalls++;
+              return envelope(
+                jsonEncode({
+                  'version': 1,
+                  'items': [
+                    {'id': 1, 'path': '/safe/a'},
+                    'not-an-object',
+                  ],
+                }),
+              );
+            }
+            singleCalls++;
+            return envelope('/safe/single');
+          });
+      final result = await methods.jmPageImageBatch([
         const JmPageImageRequest(1, 'a.jpg'),
-        const JmPageImageRequest(2, 'b.jpg')
-      ],
-      enabled: true,
-    );
-    expect(batchCalls, 1);
-    expect(singleCalls, 2);
-    expect(result.every((item) => item.succeeded), isTrue);
-  });
+        const JmPageImageRequest(2, 'b.jpg'),
+      ], enabled: true);
+      expect(batchCalls, 1);
+      expect(singleCalls, 2);
+      expect(result.every((item) => item.succeeded), isTrue);
+    },
+  );
 
   test('non-string path or error is a contract failure', () async {
     var singleCalls = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      expect(call.method, 'invoke');
-      final request = requestOf(call);
-      if (request['method'] == 'jm_page_image_batch') {
-        return envelope(jsonEncode({
-          'version': 1,
-          'items': [
-            {'id': 1, 'path': 123},
-          ],
-        }));
-      }
-      singleCalls++;
-      return envelope('/safe/single');
-    });
+          expect(call.method, 'invoke');
+          final request = requestOf(call);
+          if (request['method'] == 'jm_page_image_batch') {
+            return envelope(
+              jsonEncode({
+                'version': 1,
+                'items': [
+                  {'id': 1, 'path': 123},
+                ],
+              }),
+            );
+          }
+          singleCalls++;
+          return envelope('/safe/single');
+        });
 
-    final result = await methods.jmPageImageBatch(
-      [const JmPageImageRequest(1, 'a.jpg')],
-      enabled: true,
-    );
+    final result = await methods.jmPageImageBatch([
+      const JmPageImageRequest(1, 'a.jpg'),
+    ], enabled: true);
     expect(singleCalls, 1);
     expect(result.single.succeeded, isTrue);
   });
