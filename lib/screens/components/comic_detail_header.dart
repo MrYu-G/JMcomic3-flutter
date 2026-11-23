@@ -11,12 +11,14 @@ import 'images.dart';
 class ComicDetailHeader extends StatefulWidget {
   final AlbumResponse album;
   final ComicBasic? simple;
+  final Future<int?>? listingDateFuture;
   final ValueChanged<String> onSearch;
 
   const ComicDetailHeader({
     super.key,
     required this.album,
     this.simple,
+    this.listingDateFuture,
     required this.onSearch,
   });
 
@@ -36,7 +38,17 @@ class _ComicDetailHeaderState extends State<ComicDetailHeader> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => FutureBuilder<int?>(
+    future: widget.listingDateFuture,
+    builder: (context, snapshot) => _buildContent(
+      context,
+      snapshot.connectionState == ConnectionState.done && !snapshot.hasError
+          ? snapshot.data
+          : null,
+    ),
+  );
+
+  Widget _buildContent(BuildContext context, int? listingDate) {
     final album = widget.album;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -59,7 +71,7 @@ class _ComicDetailHeaderState extends State<ComicDetailHeader> {
     final updated = _formatTimestamp(album.updateAt ?? widget.simple?.updateAt);
     // Detail addtime is the verified web listing date. List-card metadata can
     // contain the mobile API's latest-update date and must not replace it.
-    final published = _formatTimestamp(album.addtime);
+    final published = _formatTimestamp(listingDate ?? album.addtime);
     final displayJmcode = currentDisplayJmcode();
 
     return LayoutBuilder(

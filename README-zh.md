@@ -5,7 +5,7 @@
 简体中文 · [English](README.md)
 
 JMComic3 是使用 Flutter 构建界面、内嵌 Rust 后端的漫画阅读器。本仓库维护 Flutter
-应用、Android / Windows 平台入口、测试和本地发布工具。当前稳定版为 **v1.7.43+72**。
+应用、Android / Windows 平台入口、测试和本地发布工具。当前稳定版为 **v1.7.45+74**。
 
 ## 下载与安装
 
