@@ -3,10 +3,11 @@ param(
     [switch]$ApkOnly,
     [switch]$AabOnly,
     [switch]$NoPubGet,
-    [string]$SplitDebugInfoDir = "build/symbols/android",
+    [string]$SplitDebugInfoDir = "symbols/android",
     [switch]$Obfuscate,
     [switch]$NoObfuscate,
     [switch]$DebugSign,
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')]
     [string]$OutputName = 'android-release-split'
 )
 
@@ -21,8 +22,8 @@ if ($Obfuscate -and $NoObfuscate) {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$buildRoot = if ($env:JM3_BUILD_ROOT) { $env:JM3_BUILD_ROOT } else { $repoRoot }
-$outputRoot = Join-Path $buildRoot (Join-Path 'build' $OutputName)
+. (Join-Path $PSScriptRoot 'build_common.ps1')
+$outputRoot = Get-Jm3OutputDirectory -BuildRoot $repoRoot -OutputName $OutputName
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 if (-not [string]::IsNullOrWhiteSpace($SplitDebugInfoDir) -and -not [System.IO.Path]::IsPathRooted($SplitDebugInfoDir)) {
     $SplitDebugInfoDir = Join-Path $outputRoot $SplitDebugInfoDir
@@ -110,7 +111,7 @@ function Resolve-ApkSigner {
 function Sign-AndVerifyDebugApks {
     param(
         [Parameter(Mandatory = $true)][string]$Root,
-        [Parameter(Mandatory = $true)][string]$ApkRoot
+        [Parameter(Mandatory = $true)][System.IO.FileInfo[]]$ApkFiles
     )
 
     $debugKeystore = Join-Path $env:USERPROFILE '.android/debug.keystore'
@@ -118,11 +119,7 @@ function Sign-AndVerifyDebugApks {
         throw "Debug keystore not found: $debugKeystore"
     }
     $signer = Resolve-ApkSigner -Root $Root
-    $apkFiles = @(Get-ChildItem -LiteralPath $ApkRoot -Recurse -File -Filter '*-release.apk')
-    if ($apkFiles.Count -eq 0) {
-        throw "No release APKs found under $ApkRoot"
-    }
-    foreach ($apk in $apkFiles) {
+    foreach ($apk in $ApkFiles) {
         & java -jar $signer sign `
             --ks $debugKeystore `
             --ks-key-alias androiddebugkey `
@@ -133,7 +130,7 @@ function Sign-AndVerifyDebugApks {
             throw "Debug signing failed: $($apk.FullName)"
         }
     }
-    foreach ($apk in $apkFiles) {
+    foreach ($apk in $ApkFiles) {
         & java -jar $signer verify --verbose $apk.FullName
         if ($LASTEXITCODE -ne 0) {
             throw "APK signature verification failed: $($apk.FullName)"
@@ -165,18 +162,21 @@ finally {
 }
 
 if (-not $AabOnly) {
-    # Flutter 3.41 uses its configured build directory, not FLUTTER_BUILD_DIR.
+    # Flutter uses its configured build directory, not FLUTTER_BUILD_DIR.
     # This project and its Gradle runner use the default repo-local build/.
     $apkOutputRoot = Join-Path $repoRoot 'build/app/outputs/flutter-apk'
+    # Only touch packages produced for this invocation's requested ABI set.
+    # Old packages from a prior build must not be signed or reported as current.
+    $apkFiles = @($normalizedAbi | ForEach-Object {
+        $apkPath = Join-Path $apkOutputRoot "app-$_-release.apk"
+        & (Join-Path $PSScriptRoot 'verify_android_package.ps1') -PackagePath $apkPath -ExpectedAbi @($_) | Out-Host
+        Get-Item -LiteralPath $apkPath
+    })
     if ($DebugSign) {
-        Sign-AndVerifyDebugApks -Root $repoRoot -ApkRoot $apkOutputRoot
+        Sign-AndVerifyDebugApks -Root $repoRoot -ApkFiles $apkFiles
         Write-Host 'APK signing: Android debug keystore (test install only)' -ForegroundColor Yellow
     } else {
         $signer = Resolve-ApkSigner -Root $repoRoot
-        $apkFiles = @(Get-ChildItem -LiteralPath $apkOutputRoot -Recurse -File -Filter '*-release.apk')
-        if ($apkFiles.Count -eq 0) {
-            throw "No release APKs found under $apkOutputRoot"
-        }
         foreach ($apk in $apkFiles) {
             & java -jar $signer verify $apk.FullName *> $null
             if ($LASTEXITCODE -ne 0) {
@@ -185,6 +185,9 @@ if (-not $AabOnly) {
         }
         Write-Host 'APK signing: configured release key' -ForegroundColor Green
     }
+}
+if (-not $ApkOnly) {
+    & (Join-Path $PSScriptRoot 'verify_android_package.ps1') -PackagePath (Join-Path $repoRoot 'build/app/outputs/bundle/release/app-release.aab') -ExpectedAbi $normalizedAbi
 }
 
 Write-Host "Done. ABI: $($normalizedAbi -join ', '), target-platform: $targetPlatforms"

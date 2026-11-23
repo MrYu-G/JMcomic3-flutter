@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:jmcomic3/basic/commons.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import 'package:jmcomic3/configs/app_font_size.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 

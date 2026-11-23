@@ -30,9 +30,8 @@ Widget _profile({double textScale = 1, bool dark = false}) {
     localizationsDelegates: const [AppLocalizations.delegate],
     supportedLocales: AppLocalizations.supportedLocales,
     builder: (context, child) => MediaQuery(
-      data: MediaQuery.of(context).copyWith(
-        textScaler: TextScaler.linear(textScale),
-      ),
+      data: MediaQuery.of(context)
+          .copyWith(textScaler: TextScaler.linear(textScale)),
       child: RepaintBoundary(key: _previewKey, child: child!),
     ),
     home: const UserScreen(),
@@ -57,7 +56,7 @@ Future<void> _capture(WidgetTester tester, String name) async {
   await tester.runAsync(() async {
     final bitmap = await boundary.toImage(pixelRatio: 1);
     final bytes = await bitmap.toByteData(format: ui.ImageByteFormat.png);
-    final file = File('build/layout-validation/$name.png');
+    final file = File('build/checks/account-reader-fix/$name.png');
     await file.parent.create(recursive: true);
     await file.writeAsBytes(bytes!.buffer.asUint8List());
     bitmap.dispose();
@@ -74,19 +73,48 @@ Future<void> _loadPreviewFonts(WidgetTester tester) async {
         await (FontLoader(family)..addFont(Future.value(bytes))).load();
       }
     }
-    final config =
-        jsonDecode(await File('.dart_tool/package_config.json').readAsString())
-            as Map;
+    final config = jsonDecode(
+      await File('.dart_tool/package_config.json').readAsString(),
+    ) as Map;
     final sdk = Uri.parse(config['flutterRoot'] as String).toFilePath();
     final icons = File(
-        '$sdk/bin/cache/artifacts/material_fonts/materialicons-regular.otf');
+      '$sdk/bin/cache/artifacts/material_fonts/materialicons-regular.otf',
+    );
     if (await icons.exists()) {
-      await (FontLoader('MaterialIcons')
-            ..addFont(
-                Future.value(ByteData.sublistView(await icons.readAsBytes()))))
+      await (FontLoader('MaterialIcons')..addFont(
+            Future.value(ByteData.sublistView(await icons.readAsBytes())),
+          ))
           .load();
     }
   });
+}
+
+void _expectHeaderUtilities(WidgetTester tester) {
+  final appBar = find.byType(AppBar);
+  final buttons = find.descendant(
+    of: appBar,
+    matching: find.byType(IconButton),
+  );
+  expect(buttons, findsNWidgets(3));
+  expect(find.byKey(const ValueKey('profile-utility-group')), findsNothing);
+  double? previousRight;
+  for (final label in ['Pro membership', 'Settings', 'About / Update']) {
+    final action = find.byTooltip(label);
+    expect(action, findsOneWidget);
+    expect(find.descendant(of: appBar, matching: action), findsOneWidget);
+    expect(action.hitTestable(), findsOneWidget);
+    final bounds = tester.getRect(action);
+    expect(bounds.width, greaterThanOrEqualTo(48));
+    expect(bounds.height, greaterThanOrEqualTo(48));
+    if (previousRight != null) {
+      expect(bounds.left, greaterThanOrEqualTo(previousRight));
+    }
+    previousRight = bounds.right;
+  }
+  expect(
+    find.descendant(of: appBar, matching: find.byIcon(Icons.offline_bolt)),
+    findsOneWidget,
+  );
 }
 
 void main() {
@@ -117,42 +145,44 @@ void main() {
     };
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_methodsChannel, (call) async {
-      final request =
-          jsonDecode(call.arguments as String) as Map<String, dynamic>;
-      final method = request['method'];
-      _requests.add(method as String);
-      final Object response;
-      switch (method) {
-        case 'pre_login':
-          response = {
-            'pre_set': true,
-            'pre_login': true,
-            'message': '',
-            'self_info': _selfInfo,
-          };
-          break;
-        case 'favorite':
-          response = {
-            'total': 0,
-            'count': 0,
-            'list': <Object>[],
-            'folder_list': <Object>[],
-          };
-          break;
-        case 'pro_info_all':
-          response = {
-            'pro_info_af': {'is_pro': true, 'expire': 4102444800},
-            'pro_info_pat': {'is_pro': true},
-          };
-          break;
-        default:
-          response = '';
-      }
-      return jsonEncode({
-        'error_message': '',
-        'response_data': response is String ? response : jsonEncode(response),
-      });
-    });
+          final request =
+              jsonDecode(call.arguments as String) as Map<String, dynamic>;
+          final method = request['method'];
+          _requests.add(method as String);
+          final Object response;
+          switch (method) {
+            case 'pre_login':
+              response = {
+                'pre_set': true,
+                'pre_login': true,
+                'message': '',
+                'self_info': _selfInfo,
+              };
+              break;
+            case 'favorite':
+              response = {
+                'total': 0,
+                'count': 0,
+                'list': <Object>[],
+                'folder_list': <Object>[],
+              };
+              break;
+            case 'pro_info_all':
+              response = {
+                'pro_info_af': {'is_pro': true, 'expire': 4102444800},
+                'pro_info_pat': {'is_pro': true},
+              };
+              break;
+            default:
+              response = '';
+          }
+          return jsonEncode({
+            'error_message': '',
+            'response_data': response is String
+                ? response
+                : jsonEncode(response),
+          });
+        });
   });
 
   tearDown(() {
@@ -161,8 +191,9 @@ void main() {
     dailySignStatus = DailySignStatus.unchecked;
   });
 
-  testWidgets('signed-in profile wraps at 320px with enlarged text',
-      (tester) async {
+  testWidgets('signed-in profile wraps at 320px with enlarged text', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(320, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -175,14 +206,20 @@ void main() {
     expect(find.text('reader.with.long.email@example.invalid'), findsOneWidget);
     expect(find.text('Lv.22'), findsOneWidget);
     expect(find.text('A very long membership level'), findsOneWidget);
-    expect(find.text('A long nickname that should wrap at narrow widths'),
-        findsOneWidget);
-    expect(find.text('A long signature keeps all profile details readable.'),
-        findsOneWidget);
+    expect(
+      find.text('A long nickname that should wrap at narrow widths'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('A long signature keeps all profile details readable.'),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('profile-statistics-row')), findsNothing);
-    final progress = tester
-        .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
+    final progress = tester.widget<LinearProgressIndicator>(
+      find.byType(LinearProgressIndicator),
+    );
     expect(progress.value, .35);
+    _expectHeaderUtilities(tester);
     expect(tester.takeException(), isNull);
     await _capture(tester, 'profile-mobile-large-text');
 
@@ -208,76 +245,91 @@ void main() {
     await tester.pumpAndSettle();
     final signButton = tester.widget<FilledButton>(
       find.ancestor(
-          of: find.text('Signing...'), matching: find.byType(FilledButton)),
+        of: find.text('Signing...'),
+        matching: find.byType(FilledButton),
+      ),
     );
     expect(signButton.onPressed, isNull);
     expect(find.text('Checking...'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('mobile profile groups identity, statistics and library actions',
-      (tester) async {
-    const size = Size(393, 852);
-    tester.view.physicalSize = size;
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'mobile profile groups identity, statistics and library actions',
+    (tester) async {
+      const size = Size(393, 852);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await _loadPreviewFonts(tester);
-    await tester.pumpWidget(_profile());
-    await _loadProfile(tester);
-    await _capture(tester, 'profile-mobile-signed-in');
+      await _loadPreviewFonts(tester);
+      await tester.pumpWidget(_profile());
+      await _loadProfile(tester);
+      await _capture(tester, 'profile-mobile-signed-in');
 
-    expect(
-      tester.getRect(find.byType(Avatar)).right,
-      lessThan(tester.getRect(find.text(_username)).left),
-    );
-    expect(
-      tester.getRect(find.text('Lv.22')).bottom,
-      lessThan(tester.getRect(find.text('EXP')).top),
-    );
-    final stats = find.byKey(const ValueKey('profile-statistics-row'));
-    expect(stats, findsOneWidget);
-    expect(
-        find.descendant(of: stats, matching: find.text('35%')), findsOneWidget);
-    expect(find.descendant(of: stats, matching: find.text('987654321')),
-        findsOneWidget);
-    expect(
-        find.descendant(of: stats, matching: find.text('2')), findsOneWidget);
-    final library = find.byKey(const ValueKey('profile-library-card'));
-    expect(library, findsOneWidget);
+      expect(
+        tester.getRect(find.byType(Avatar)).right,
+        lessThan(tester.getRect(find.text(_username)).left),
+      );
+      expect(
+        tester.getRect(find.text('Lv.22')).bottom,
+        lessThan(tester.getRect(find.text('EXP')).top),
+      );
+      final stats = find.byKey(const ValueKey('profile-statistics-row'));
+      expect(stats, findsOneWidget);
+      expect(
+        find.descendant(of: stats, matching: find.text('35%')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: stats, matching: find.text('987654321')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: stats, matching: find.text('2')),
+        findsOneWidget,
+      );
+      final library = find.byKey(const ValueKey('profile-library-card'));
+      expect(library, findsOneWidget);
 
-    for (final label in [
-      'Favorites',
-      'History',
-      'Download List',
-      'Comments',
-    ]) {
-      final target = find.text(label);
-      expect(target, findsOneWidget, reason: label);
-      await tester.ensureVisible(target);
-      await tester.pumpAndSettle();
+      _expectHeaderUtilities(tester);
 
-      final row = find.ancestor(of: target, matching: find.byType(InkWell));
-      expect(row, findsOneWidget, reason: label);
-      final rect = tester.getRect(row);
-      expect(rect.width, greaterThanOrEqualTo(350), reason: label);
-      expect(rect.height, greaterThanOrEqualTo(60), reason: label);
-      expect(find.ancestor(of: target, matching: library), findsOneWidget);
-      expect(rect.left, greaterThanOrEqualTo(0), reason: label);
-      expect(rect.right, lessThanOrEqualTo(size.width), reason: label);
-      expect(target.hitTestable(), findsOneWidget, reason: label);
-      expect(tester.takeException(), isNull, reason: label);
-    }
-  });
+      for (final label in [
+        'Favorites',
+        'History',
+        'Download List',
+        'Comments',
+      ]) {
+        final target = find.text(label);
+        expect(target, findsOneWidget, reason: label);
+        await tester.ensureVisible(target);
+        await tester.pumpAndSettle();
 
-  testWidgets('wide signed-in profile and library share a bounded row',
-      (tester) async {
+        final row = find.ancestor(of: target, matching: find.byType(InkWell));
+        expect(row, findsOneWidget, reason: label);
+        final rect = tester.getRect(row);
+        expect(rect.width, greaterThanOrEqualTo(350), reason: label);
+        expect(rect.height, greaterThanOrEqualTo(48), reason: label);
+        expect(find.ancestor(of: target, matching: library), findsOneWidget);
+        expect(rect.left, greaterThanOrEqualTo(0), reason: label);
+        expect(rect.right, lessThanOrEqualTo(size.width), reason: label);
+        expect(target.hitTestable(), findsOneWidget, reason: label);
+        expect(tester.takeException(), isNull, reason: label);
+      }
+      _expectHeaderUtilities(tester);
+    },
+  );
+
+  testWidgets('wide signed-in profile and library share a bounded row', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1600, 1000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    await _loadPreviewFonts(tester);
     await tester.pumpWidget(_profile(textScale: 1.5));
     await _loadProfile(tester);
     final profilePosition = tester.getTopLeft(find.text(_username));
@@ -293,67 +345,108 @@ void main() {
     expect(tester.getTopLeft(content).dx, 240);
     expect(find.text('Manual Sign-in').hitTestable(), findsOneWidget);
     expect(find.text('Comments').hitTestable(), findsOneWidget);
+    final account = find.byKey(const ValueKey('profile-account-card'));
+    final utilities = find.byKey(const ValueKey('profile-utility-group'));
+    expect(utilities, findsOneWidget);
+    expect(
+      tester.getCenter(utilities).dx,
+      closeTo(tester.getCenter(account).dx, .5),
+    );
+    final buttons = find.descendant(
+      of: utilities,
+      matching: find.byType(IconButton),
+    );
+    expect(buttons, findsNWidgets(3));
+    for (final button in buttons.evaluate()) {
+      final size = tester.getSize(find.byWidget(button.widget));
+      expect(size.width, greaterThanOrEqualTo(48));
+      expect(size.height, greaterThanOrEqualTo(48));
+    }
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byType(IconButton),
+      ),
+      findsNothing,
+    );
+    for (final label in ['Pro membership', 'Settings', 'About / Update']) {
+      expect(find.byTooltip(label), findsOneWidget);
+    }
     expect(tester.takeException(), isNull);
+    await _capture(tester, 'profile-wide');
   });
 
   for (final dark in [false, true]) {
     testWidgets(
-        'compact signed-in card follows ${dark ? 'dark' : 'light'} theme',
-        (tester) async {
-      tester.view.physicalSize = const Size(393, 852);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      _selfInfo.addAll({
-        'username': 'baigeiyyds',
-        'uid': 4444611,
-        'fname': '',
-        'email': 'reader@example.com',
-        'level_name': 'Quiet reader',
-        'level': 9,
-        'expPercent': 78.0,
-        'coin': 24294,
-        'badges': <String>[],
-        'message': 'Welcome! A long signature wraps without widening the card.',
-      });
-      dailySignStatus = DailySignStatus.signed;
-      await _loadPreviewFonts(tester);
-      await tester.pumpWidget(_profile(dark: dark));
-      await _loadProfile(tester);
-      final card = tester.widget<Container>(
-        find.byKey(const ValueKey('profile-account-card')),
-      );
-      final color = (card.decoration! as BoxDecoration).color;
-      final theme = Theme.of(tester.element(find.byType(UserScreen)));
-      expect(
+      'compact signed-in card follows ${dark ? 'dark' : 'light'} theme',
+      (tester) async {
+        tester.view.physicalSize = const Size(393, 852);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        _selfInfo.addAll({
+          'username': 'sample_reader',
+          'uid': 4242,
+          'fname': '',
+          'email': 'reader@example.invalid',
+          'level_name': 'Quiet reader',
+          'level': 7,
+          'expPercent': 64.0,
+          'coin': 12345,
+          'badges': <String>[],
+          'message':
+              'Welcome! A long signature wraps without widening the card.',
+        });
+        dailySignStatus = DailySignStatus.signed;
+        await _loadPreviewFonts(tester);
+        await tester.pumpWidget(_profile(dark: dark));
+        await _loadProfile(tester);
+        final card = tester.widget<Container>(
+          find.byKey(const ValueKey('profile-account-card')),
+        );
+        final color = (card.decoration! as BoxDecoration).color;
+        final theme = Theme.of(tester.element(find.byType(UserScreen)));
+        expect(
           color,
           dark
               ? const Color(0xFF17272E)
-              : theme.colorScheme.surfaceContainerLow);
-      expect(tester.widget<Text>(find.text('baigeiyyds')).style!.fontSize, 19);
-      expect(tester.widget<Text>(find.text('baigeiyyds')).style!.fontWeight,
-          FontWeight.w500);
-      final sign = find.byKey(const ValueKey('profile-daily-sign'));
-      expect(tester.getRect(sign).left,
-          greaterThan(tester.getRect(find.text('UID 4444611')).left));
-      expect(find.text('Signed in'), findsOneWidget);
-      expect(tester.widget<FilledButton>(sign).onPressed, isNull);
-      expect(
+              : theme.colorScheme.surfaceContainerLow,
+        );
+        expect(
+          tester.widget<Text>(find.text('sample_reader')).style!.fontSize,
+          19,
+        );
+        expect(
+          tester.widget<Text>(find.text('sample_reader')).style!.fontWeight,
+          FontWeight.w500,
+        );
+        final sign = find.byKey(const ValueKey('profile-daily-sign'));
+        expect(
+          tester.getRect(sign).left,
+          greaterThan(tester.getRect(find.text('UID 4242')).left),
+        );
+        expect(find.text('Signed in'), findsOneWidget);
+        expect(tester.widget<FilledButton>(sign).onPressed, isNull);
+        expect(
           tester
               .widget<LinearProgressIndicator>(
-                  find.byType(LinearProgressIndicator))
+                find.byType(LinearProgressIndicator),
+              )
               .value,
-          .78);
-      expect(find.text('78%'), findsOneWidget);
-      expect(find.text('24294'), findsOneWidget);
-      expect(find.text('0'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-      await _capture(tester, 'profile-mobile-${dark ? 'dark' : 'light'}');
-    });
+          .64,
+        );
+        expect(find.text('64%'), findsOneWidget);
+        expect(find.text('12345'), findsOneWidget);
+        expect(find.text('0'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await _capture(tester, 'profile-mobile-${dark ? 'dark' : 'light'}');
+      },
+    );
   }
 
-  testWidgets('profile sign-in action still updates real daily status',
-      (tester) async {
+  testWidgets('profile sign-in action still updates real daily status', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(393, 852);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);

@@ -1,9 +1,9 @@
 [CmdletBinding()]
-param()
+param([string]$RustBackendDir = '')
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'enter_build_env.ps1')
+. (Join-Path $PSScriptRoot 'enter_build_env.ps1') -RustBackendDir $RustBackendDir -Target Windows
 $root = $env:JM3_BUILD_ROOT
-$crate = Join-Path $root 'rust-backend/rust'
+$crate = $env:RUST_BACKEND_RUST_DIR
 $header = Join-Path $root 'windows/rust.h'
 
 # The runner includes this small C ABI declaration directly.  Keep the header

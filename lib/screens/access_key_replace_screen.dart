@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:jmcomic3/basic/log.dart';
-import '../basic/commons.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import '../basic/methods.dart';
 import '../configs/is_pro.dart';
 import 'components/right_click_pop.dart';

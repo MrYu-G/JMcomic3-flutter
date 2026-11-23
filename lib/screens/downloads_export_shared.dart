@@ -1,11 +1,13 @@
-import 'package:jmcomic3/basic/methods.dart';
+import 'package:jmcomic3/basic/entities.dart';
 
-typedef DownloadAlbumFilter = bool Function(DownloadAlbum album);
+enum DownloadExportScope {
+  completed,
+  includingIncomplete;
 
-Future<List<DownloadAlbum>> loadDownloadAlbums(
-    DownloadAlbumFilter filter) async {
-  final all = await methods.allDownloads();
-  return all.where(filter).toList(growable: false);
+  bool accepts(DownloadAlbum album) => switch (this) {
+    completed => album.isDownloaded,
+    includingIncomplete => !album.isDeleting,
+  };
 }
 
 /// 批量导出页会在每个卡片构建时判断选中状态；Set 让包含判断和切换保持 O(1)。
@@ -22,12 +24,4 @@ Set<int> restoreSelectedIdSet(
 ) {
   final latestIds = latest.map((e) => e.id).toSet();
   return previousSelected.where(latestIds.contains).toSet();
-}
-
-List<int> restoreSelectedIds(
-  List<int> previousSelected,
-  List<DownloadAlbum> latest,
-) {
-  return restoreSelectedIdSet(previousSelected.toSet(), latest)
-      .toList(growable: false);
 }

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 
-import '../basic/commons.dart';
+import 'package:jmcomic3/screens/components/dialogs.dart';
 import '../basic/log.dart';
 import '../basic/methods.dart';
 import '../basic/reader_system_ui.dart';
@@ -21,8 +21,10 @@ final ColorScheme _darkColorScheme = ColorScheme.fromSeed(
   brightness: Brightness.dark,
 );
 
-final ThemeData _lightTheme =
-    _buildAppTheme(_lightColorScheme, Brightness.light);
+final ThemeData _lightTheme = _buildAppTheme(
+  _lightColorScheme,
+  Brightness.light,
+);
 final ThemeData _darkTheme = _buildAppTheme(_darkColorScheme, Brightness.dark);
 
 ThemeData get lightTheme => theme != "2" ? _lightTheme : _darkTheme;
@@ -64,8 +66,9 @@ Map<String, String> _nameMap(BuildContext context) {
 
 ThemeData _buildAppTheme(ColorScheme scheme, Brightness brightness) {
   final typography = Typography.material2021();
-  final baseTextTheme =
-      brightness == Brightness.light ? typography.black : typography.white;
+  final baseTextTheme = brightness == Brightness.light
+      ? typography.black
+      : typography.white;
   final textTheme = _buildTextTheme(baseTextTheme, scheme);
   final overlayStyle = brightness == Brightness.dark
       ? const SystemUiOverlayStyle(
@@ -80,12 +83,19 @@ ThemeData _buildAppTheme(ColorScheme scheme, Brightness brightness) {
           statusBarBrightness: Brightness.light,
           systemStatusBarContrastEnforced: false,
         );
-  final navLabelStyle = (textTheme.labelMedium ??
-          const TextStyle(fontSize: 11, fontWeight: FontWeight.w400))
-      .copyWith(fontSize: 11, fontWeight: FontWeight.w400);
+  final navLabelStyle =
+      (textTheme.labelMedium ??
+              const TextStyle(fontSize: 11, fontWeight: FontWeight.w400))
+          .copyWith(fontSize: 11, fontWeight: FontWeight.w400);
 
   return ThemeData(
     useMaterial3: true,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+        TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
+      },
+    ),
     colorScheme: scheme,
     typography: typography,
     textTheme: textTheme,
@@ -146,14 +156,17 @@ ThemeData _buildAppTheme(ColorScheme scheme, Brightness brightness) {
     dialogTheme: DialogThemeData(
       backgroundColor: scheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      titleTextStyle:
-          textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w500),
+      titleTextStyle: textTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.w500,
+      ),
       contentTextStyle: textTheme.bodyMedium,
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: scheme.surfaceVariant,
-      contentTextStyle: textTheme.bodyMedium
-          ?.copyWith(color: scheme.onSurface, fontWeight: FontWeight.w400),
+      contentTextStyle: textTheme.bodyMedium?.copyWith(
+        color: scheme.onSurface,
+        fontWeight: FontWeight.w400,
+      ),
       behavior: SnackBarBehavior.floating,
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -173,8 +186,9 @@ ThemeData _buildAppTheme(ColorScheme scheme, Brightness brightness) {
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: scheme.primary),
       ),
-      labelStyle:
-          textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+      labelStyle: textTheme.bodyMedium?.copyWith(
+        color: scheme.onSurfaceVariant,
+      ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: ButtonStyle(
@@ -331,9 +345,11 @@ String themeName(BuildContext context) {
 
 Future chooseTheme(BuildContext context) async {
   final nameMap = _nameMap(context);
-  String? choose = await chooseMapDialog(context,
-      title: context.l10n.tr("选择主题", en: "Choose theme"),
-      values: nameMap.map((key, value) => MapEntry(value, key)));
+  String? choose = await chooseMapDialog(
+    context,
+    title: context.l10n.tr("选择主题", en: "Choose theme"),
+    values: nameMap.map((key, value) => MapEntry(value, key)),
+  );
   if (choose != null) {
     await methods.saveProperty(_propertyName, choose);
     theme = choose;
@@ -347,25 +363,29 @@ void reloadBarColor({bool op = false}) {
 }
 
 void _reloadBarColor({bool op = false}) {
-  final isDark = theme == "2" ||
+  final isDark =
+      theme == "2" ||
       (theme == "0" &&
           WidgetsBinding.instance.platformDispatcher.platformBrightness ==
               Brightness.dark);
   final navigationColor = op
       ? Colors.transparent
       : isDark
-          ? Colors.black87
-          : Colors.white;
-  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-    statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-    systemNavigationBarColor: navigationColor,
-    systemNavigationBarIconBrightness:
-        isDark ? Brightness.light : Brightness.dark,
-    systemStatusBarContrastEnforced: false,
-    systemNavigationBarContrastEnforced: false,
-  ));
+      ? Colors.black87
+      : Colors.white;
+  SystemChrome.setSystemUIOverlayStyle(
+    SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: navigationColor,
+      systemNavigationBarIconBrightness: isDark
+          ? Brightness.light
+          : Brightness.dark,
+      systemStatusBarContrastEnforced: false,
+      systemNavigationBarContrastEnforced: false,
+    ),
+  );
 }
 
 final themeEvent = Event();

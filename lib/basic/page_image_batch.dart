@@ -2,13 +2,15 @@
 class JmPageImageRequest {
   final int id;
   final String imageName;
+  final String? readerSession;
 
-  const JmPageImageRequest(this.id, this.imageName);
+  const JmPageImageRequest(this.id, this.imageName, {this.readerSession});
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'image_name': imageName,
-      };
+    'id': id,
+    'image_name': imageName,
+    if (readerSession != null) 'reader_session': readerSession,
+  };
 }
 
 /// One item in a batch response. A failed item is represented by [error] and

@@ -58,6 +58,7 @@ class ZoomablePositionedList extends StatefulWidget {
     this.addAutomaticKeepAlives = true,
     this.addRepaintBoundaries = true,
     this.minCacheExtent,
+    this.cacheExtent,
     this.minScale = 1.0,
     this.maxScale = 5.0,
     this.initialScale = 1.0,
@@ -95,6 +96,7 @@ class ZoomablePositionedList extends StatefulWidget {
     this.addAutomaticKeepAlives = true,
     this.addRepaintBoundaries = true,
     this.minCacheExtent,
+    this.cacheExtent,
     this.minScale = 1.0,
     this.maxScale = 5.0,
     this.initialScale = 1.0,
@@ -199,6 +201,10 @@ class ZoomablePositionedList extends StatefulWidget {
   /// in builds of widgets that would otherwise already be built in the
   /// cache extent.
   final double? minCacheExtent;
+
+  /// Exact cache extent when the caller owns preloading. Null retains the
+  /// upstream two-screen minimum used for long animated scrolls.
+  final double? cacheExtent;
 
   final double minScale;
   final double maxScale;
@@ -496,13 +502,15 @@ class _ZoomablePositionedListState extends State<ZoomablePositionedList>
                       double screenHeight = constraints.maxHeight;
                       double tapY = details.localPosition.dy;
                       targetScroll = currentScroll +
-                          mainAxisSign * (tapY - screenHeight / 2) *
+                          mainAxisSign *
+                              (tapY - screenHeight / 2) *
                               (1 / _scale - 1 / targetScale);
                     } else {
                       double screenWidth = constraints.maxWidth;
                       double tapX = details.localPosition.dx;
                       targetScroll = currentScroll +
-                          mainAxisSign * (tapX - screenWidth / 2) *
+                          mainAxisSign *
+                              (tapX - screenWidth / 2) *
                               (1 / _scale - 1 / targetScale);
                     }
                   } else {
@@ -516,8 +524,8 @@ class _ZoomablePositionedListState extends State<ZoomablePositionedList>
 
                       // Pan: (F - C)(1-k) + k*Pan
                       // here Pan is likely 0 if zooming in from 1.0, but general formula works
-                      targetPan = (tapX - screenWidth / 2) * (1 - k) +
-                          k * _panOffset;
+                      targetPan =
+                          (tapX - screenWidth / 2) * (1 - k) + k * _panOffset;
 
                       double minPan = screenWidth / 3 -
                           screenWidth * targetScale -
@@ -536,7 +544,8 @@ class _ZoomablePositionedListState extends State<ZoomablePositionedList>
                       targetPan = targetPan.clamp(minPan, maxPan);
 
                       targetScroll = currentScroll +
-                          mainAxisSign * (tapY - screenHeight / 2) *
+                          mainAxisSign *
+                              (tapY - screenHeight / 2) *
                               (1.0 - 1.0 / widget.doubleTapScale);
                     } else {
                       double screenWidth = constraints.maxWidth;
@@ -544,8 +553,8 @@ class _ZoomablePositionedListState extends State<ZoomablePositionedList>
                       double tapX = details.localPosition.dx;
                       double tapY = details.localPosition.dy;
 
-                      targetPan = (tapY - screenHeight / 2) * (1 - k) +
-                          k * _panOffset;
+                      targetPan =
+                          (tapY - screenHeight / 2) * (1 - k) + k * _panOffset;
 
                       double minPan = screenHeight / 3 -
                           screenHeight * targetScale -
@@ -564,7 +573,8 @@ class _ZoomablePositionedListState extends State<ZoomablePositionedList>
                       targetPan = targetPan.clamp(minPan, maxPan);
 
                       targetScroll = currentScroll +
-                          mainAxisSign * (tapX - screenWidth / 2) *
+                          mainAxisSign *
+                              (tapX - screenWidth / 2) *
                               (1.0 - 1.0 / widget.doubleTapScale);
                     }
                   }
@@ -598,11 +608,11 @@ class _ZoomablePositionedListState extends State<ZoomablePositionedList>
                             .animate(CurvedAnimation(
                                 parent: _zoomAnimationController!,
                                 curve: Curves.easeInOut));
-                    _zoomScrollAnimation = Tween<double>(
-                            begin: currentScroll, end: targetScroll)
-                        .animate(CurvedAnimation(
-                            parent: _zoomAnimationController!,
-                            curve: Curves.easeInOut));
+                    _zoomScrollAnimation =
+                        Tween<double>(begin: currentScroll, end: targetScroll)
+                            .animate(CurvedAnimation(
+                                parent: _zoomAnimationController!,
+                                curve: Curves.easeInOut));
 
                     _zoomAnimationController!.reset();
                     _zoomAnimationController!.forward();
@@ -619,122 +629,126 @@ class _ZoomablePositionedListState extends State<ZoomablePositionedList>
               ? null
               : (details) {
                   if (details.pointerCount == 2 &&
-                _scale == widget.minScale &&
-                (details.scale - 1).abs() < 0.02) {
-              return;
-            }
-            setState(() {
-              double effectiveScaleInput =
-                  pow(details.scale, widget.gestureSpeed).toDouble();
-              double newScale = (_baseScale * effectiveScaleInput)
-                  .clamp(widget.minScale, widget.maxScale);
-              double scaleDelta = newScale / _scale;
-
-              if (widget.scrollDirection == Axis.vertical) {
-                // Text is scrolling vertically (Y). Panning horizontally (X).
-                // Alignment.center logic:
-                // VisualY = s*(y_loc - Scroll) + Cy*(1-s)
-                // VisualX = s * x_loc + Pan + Cx*(1-s) (Assuming x_loc relative to 0)
-
-                double screenWidth = constraints.maxWidth;
-                double screenHeight = constraints.maxHeight;
-                double centerX = screenWidth / 2;
-                double centerY = screenHeight / 2;
-
-                // 1. Calculate new Scroll Offset (Main Axis - Y)
-                double currentScroll = primary.scrollController.hasClients
-                    ? primary.scrollController.offset
-                    : 0.0;
-                double distY = details.localFocalPoint.dy - centerY;
-                // Scroll_new = Scroll_old + (Fy - Cy)(1/s - 1/s') - delta/s'
-                // Use _scale (old scale) for delta to be precise with frame timing?
-                // Actually mathematically derived is s_new for absolute positioning.
-                // Keeping s_new as it matches derivation Y_abs invariant.
-                double scrollChange = mainAxisSign * (distY * (1 / _scale - 1 / newScale) -
-                    (details.focalPointDelta.dy * widget.gestureSpeed) /
-                        newScale);
-                double newScroll = currentScroll + scrollChange;
-
-                // 2. Calculate new Pan Offset (Cross Axis - X)
-                // Pan' = (Fx - Cx)(1-k) + deltaX + k*Pan
-                double distX = details.localFocalPoint.dx - centerX;
-                double newPan = distX * (1 - scaleDelta) +
-                    (details.focalPointDelta.dx * widget.gestureSpeed) +
-                    scaleDelta * _panOffset;
-
-                // 3. Clamp Pan Offset
-                double minPan = screenWidth / 3 -
-                    screenWidth * newScale -
-                    centerX * (1 - newScale);
-                double maxPan =
-                    screenWidth * 2 / 3 - centerX * (1 - newScale);
-                if (widget.dragRegionLock) {
-                  if (newScale <= 1.0) {
-                    minPan = 0;
-                    maxPan = 0;
-                  } else {
-                    minPan = -centerX * (newScale - 1);
-                    maxPan = centerX * (newScale - 1);
+                      _scale == widget.minScale &&
+                      (details.scale - 1).abs() < 0.02) {
+                    return;
                   }
-                }
-                newPan = newPan.clamp(minPan, maxPan);
+                  setState(() {
+                    double effectiveScaleInput =
+                        pow(details.scale, widget.gestureSpeed).toDouble();
+                    double newScale = (_baseScale * effectiveScaleInput)
+                        .clamp(widget.minScale, widget.maxScale);
+                    double scaleDelta = newScale / _scale;
 
-                // 4. Apply
-                _scale = newScale;
-                _panOffset = newPan;
-                if (primary.scrollController.hasClients) {
-                  primary.scrollController.jumpTo(newScroll);
-                }
-              } else {
-                // Text is scrolling horizontally (X). Panning vertically (Y).
+                    if (widget.scrollDirection == Axis.vertical) {
+                      // Text is scrolling vertically (Y). Panning horizontally (X).
+                      // Alignment.center logic:
+                      // VisualY = s*(y_loc - Scroll) + Cy*(1-s)
+                      // VisualX = s * x_loc + Pan + Cx*(1-s) (Assuming x_loc relative to 0)
 
-                double screenWidth = constraints.maxWidth;
-                double screenHeight = constraints.maxHeight;
-                double centerX = screenWidth / 2;
-                double centerY = screenHeight / 2;
+                      double screenWidth = constraints.maxWidth;
+                      double screenHeight = constraints.maxHeight;
+                      double centerX = screenWidth / 2;
+                      double centerY = screenHeight / 2;
 
-                // 1. Calculate new Scroll Offset (Main Axis - X)
-                double currentScroll = primary.scrollController.hasClients
-                    ? primary.scrollController.offset
-                    : 0.0;
-                double distX = details.localFocalPoint.dx - centerX;
-                double scrollChange = mainAxisSign * (distX * (1 / _scale - 1 / newScale) -
-                    (details.focalPointDelta.dx * widget.gestureSpeed) /
-                        newScale);
-                double newScroll = currentScroll + scrollChange;
+                      // 1. Calculate new Scroll Offset (Main Axis - Y)
+                      double currentScroll = primary.scrollController.hasClients
+                          ? primary.scrollController.offset
+                          : 0.0;
+                      double distY = details.localFocalPoint.dy - centerY;
+                      // Scroll_new = Scroll_old + (Fy - Cy)(1/s - 1/s') - delta/s'
+                      // Use _scale (old scale) for delta to be precise with frame timing?
+                      // Actually mathematically derived is s_new for absolute positioning.
+                      // Keeping s_new as it matches derivation Y_abs invariant.
+                      double scrollChange = mainAxisSign *
+                          (distY * (1 / _scale - 1 / newScale) -
+                              (details.focalPointDelta.dy *
+                                      widget.gestureSpeed) /
+                                  newScale);
+                      double newScroll = currentScroll + scrollChange;
 
-                // 2. Calculate new Pan Offset (Cross Axis - Y)
-                double distY = details.localFocalPoint.dy - centerY;
-                double newPan = distY * (1 - scaleDelta) +
-                    (details.focalPointDelta.dy * widget.gestureSpeed) +
-                    scaleDelta * _panOffset;
+                      // 2. Calculate new Pan Offset (Cross Axis - X)
+                      // Pan' = (Fx - Cx)(1-k) + deltaX + k*Pan
+                      double distX = details.localFocalPoint.dx - centerX;
+                      double newPan = distX * (1 - scaleDelta) +
+                          (details.focalPointDelta.dx * widget.gestureSpeed) +
+                          scaleDelta * _panOffset;
 
-                // 3. Clamp Pan Offset
-                double minPan = screenHeight / 3 -
-                    screenHeight * newScale -
-                    centerY * (1 - newScale);
-                double maxPan =
-                    screenHeight * 2 / 3 - centerY * (1 - newScale);
-                if (widget.dragRegionLock) {
-                  if (newScale <= 1.0) {
-                    minPan = 0;
-                    maxPan = 0;
-                  } else {
-                    minPan = -centerY * (newScale - 1);
-                    maxPan = centerY * (newScale - 1);
-                  }
-                }
-                newPan = newPan.clamp(minPan, maxPan);
+                      // 3. Clamp Pan Offset
+                      double minPan = screenWidth / 3 -
+                          screenWidth * newScale -
+                          centerX * (1 - newScale);
+                      double maxPan =
+                          screenWidth * 2 / 3 - centerX * (1 - newScale);
+                      if (widget.dragRegionLock) {
+                        if (newScale <= 1.0) {
+                          minPan = 0;
+                          maxPan = 0;
+                        } else {
+                          minPan = -centerX * (newScale - 1);
+                          maxPan = centerX * (newScale - 1);
+                        }
+                      }
+                      newPan = newPan.clamp(minPan, maxPan);
 
-                // 4. Apply
-                _scale = newScale;
-                _panOffset = newPan;
-                if (primary.scrollController.hasClients) {
-                  primary.scrollController.jumpTo(newScroll);
-                }
-              }
-            });
-          },
+                      // 4. Apply
+                      _scale = newScale;
+                      _panOffset = newPan;
+                      if (primary.scrollController.hasClients) {
+                        primary.scrollController.jumpTo(newScroll);
+                      }
+                    } else {
+                      // Text is scrolling horizontally (X). Panning vertically (Y).
+
+                      double screenWidth = constraints.maxWidth;
+                      double screenHeight = constraints.maxHeight;
+                      double centerX = screenWidth / 2;
+                      double centerY = screenHeight / 2;
+
+                      // 1. Calculate new Scroll Offset (Main Axis - X)
+                      double currentScroll = primary.scrollController.hasClients
+                          ? primary.scrollController.offset
+                          : 0.0;
+                      double distX = details.localFocalPoint.dx - centerX;
+                      double scrollChange = mainAxisSign *
+                          (distX * (1 / _scale - 1 / newScale) -
+                              (details.focalPointDelta.dx *
+                                      widget.gestureSpeed) /
+                                  newScale);
+                      double newScroll = currentScroll + scrollChange;
+
+                      // 2. Calculate new Pan Offset (Cross Axis - Y)
+                      double distY = details.localFocalPoint.dy - centerY;
+                      double newPan = distY * (1 - scaleDelta) +
+                          (details.focalPointDelta.dy * widget.gestureSpeed) +
+                          scaleDelta * _panOffset;
+
+                      // 3. Clamp Pan Offset
+                      double minPan = screenHeight / 3 -
+                          screenHeight * newScale -
+                          centerY * (1 - newScale);
+                      double maxPan =
+                          screenHeight * 2 / 3 - centerY * (1 - newScale);
+                      if (widget.dragRegionLock) {
+                        if (newScale <= 1.0) {
+                          minPan = 0;
+                          maxPan = 0;
+                        } else {
+                          minPan = -centerY * (newScale - 1);
+                          maxPan = centerY * (newScale - 1);
+                        }
+                      }
+                      newPan = newPan.clamp(minPan, maxPan);
+
+                      // 4. Apply
+                      _scale = newScale;
+                      _panOffset = newPan;
+                      if (primary.scrollController.hasClients) {
+                        primary.scrollController.jumpTo(newScroll);
+                      }
+                    }
+                  });
+                },
           child: Listener(
             onPointerDown: (_) {
               _stopScroll(canceled: true);
@@ -760,86 +774,87 @@ class _ZoomablePositionedListState extends State<ZoomablePositionedList>
                         constraints.maxHeight / 2 * (1 - _scale))
                     ..scale(_scale))
                   : (Matrix4.identity()
-                    ..translate(
-                        constraints.maxWidth / 2 * (1 - _scale),
+                    ..translate(constraints.maxWidth / 2 * (1 - _scale),
                         _panOffset + constraints.maxHeight / 2 * (1 - _scale))
                     ..scale(_scale)),
               alignment: Alignment.topLeft,
               child: Stack(
                 children: <Widget>[
-              PostMountCallback(
-                key: primary.key,
-                callback: startAnimationCallback,
-                child: FadeTransition(
-                  opacity: ReverseAnimation(opacity),
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: (_) => _isTransitioning,
-                    child: PositionedList(
-                      itemBuilder: widget.itemBuilder,
-                      separatorBuilder: widget.separatorBuilder,
-                      itemCount: widget.itemCount,
-                      positionedIndex: primary.target,
-                      controller: primary.scrollController,
-                      itemPositionsNotifier: primary.itemPositionsNotifier,
-                      scrollDirection: widget.scrollDirection,
-                      reverse: widget.reverse,
-                      cacheExtent: cacheExtent,
-                      alignment: primary.alignment,
-                      physics: _scale > 1.0 || _pointers >= 2
-                          ? const NeverScrollableScrollPhysics()
-                          : (widget.gestureSpeed == 1.0
-                              ? widget.physics
-                              : _SpeedMultiplierPhysics(
-                                  speed: widget.gestureSpeed,
-                                  parent: widget.physics)),
-                      shrinkWrap: widget.shrinkWrap,
-                      addSemanticIndexes: widget.addSemanticIndexes,
-                      semanticChildCount: widget.semanticChildCount,
-                      padding: widget.padding,
-                      addAutomaticKeepAlives: widget.addAutomaticKeepAlives,
-                      addRepaintBoundaries: widget.addRepaintBoundaries,
-                    ),
-                  ),
-                ),
-              ),
-              if (_isTransitioning)
-                PostMountCallback(
-                  key: secondary.key,
-                  callback: startAnimationCallback,
-                  child: FadeTransition(
-                    opacity: opacity,
-                    child: NotificationListener<ScrollNotification>(
-                      onNotification: (_) => false,
-                      child: PositionedList(
-                        itemBuilder: widget.itemBuilder,
-                        separatorBuilder: widget.separatorBuilder,
-                        itemCount: widget.itemCount,
-                        itemPositionsNotifier: secondary.itemPositionsNotifier,
-                        positionedIndex: secondary.target,
-                        controller: secondary.scrollController,
-                        scrollDirection: widget.scrollDirection,
-                        reverse: widget.reverse,
-                        cacheExtent: cacheExtent,
-                        alignment: secondary.alignment,
-                        physics: _scale > 1.0 || _pointers >= 2
-                            ? const NeverScrollableScrollPhysics()
-                            : (widget.gestureSpeed == 1.0
-                                ? widget.physics
-                                : _SpeedMultiplierPhysics(
-                                    speed: widget.gestureSpeed,
-                                    parent: widget.physics)),
-                        shrinkWrap: widget.shrinkWrap,
-                        addSemanticIndexes: widget.addSemanticIndexes,
-                        semanticChildCount: widget.semanticChildCount,
-                        padding: widget.padding,
-                        addAutomaticKeepAlives: widget.addAutomaticKeepAlives,
-                        addRepaintBoundaries: widget.addRepaintBoundaries,
+                  PostMountCallback(
+                    key: primary.key,
+                    callback: startAnimationCallback,
+                    child: FadeTransition(
+                      opacity: ReverseAnimation(opacity),
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: (_) => _isTransitioning,
+                        child: PositionedList(
+                          itemBuilder: widget.itemBuilder,
+                          separatorBuilder: widget.separatorBuilder,
+                          itemCount: widget.itemCount,
+                          positionedIndex: primary.target,
+                          controller: primary.scrollController,
+                          itemPositionsNotifier: primary.itemPositionsNotifier,
+                          scrollDirection: widget.scrollDirection,
+                          reverse: widget.reverse,
+                          cacheExtent: cacheExtent,
+                          alignment: primary.alignment,
+                          physics: _scale > 1.0 || _pointers >= 2
+                              ? const NeverScrollableScrollPhysics()
+                              : (widget.gestureSpeed == 1.0
+                                  ? widget.physics
+                                  : _SpeedMultiplierPhysics(
+                                      speed: widget.gestureSpeed,
+                                      parent: widget.physics)),
+                          shrinkWrap: widget.shrinkWrap,
+                          addSemanticIndexes: widget.addSemanticIndexes,
+                          semanticChildCount: widget.semanticChildCount,
+                          padding: widget.padding,
+                          addAutomaticKeepAlives: widget.addAutomaticKeepAlives,
+                          addRepaintBoundaries: widget.addRepaintBoundaries,
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
-          ),
+                  if (_isTransitioning)
+                    PostMountCallback(
+                      key: secondary.key,
+                      callback: startAnimationCallback,
+                      child: FadeTransition(
+                        opacity: opacity,
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: (_) => false,
+                          child: PositionedList(
+                            itemBuilder: widget.itemBuilder,
+                            separatorBuilder: widget.separatorBuilder,
+                            itemCount: widget.itemCount,
+                            itemPositionsNotifier:
+                                secondary.itemPositionsNotifier,
+                            positionedIndex: secondary.target,
+                            controller: secondary.scrollController,
+                            scrollDirection: widget.scrollDirection,
+                            reverse: widget.reverse,
+                            cacheExtent: cacheExtent,
+                            alignment: secondary.alignment,
+                            physics: _scale > 1.0 || _pointers >= 2
+                                ? const NeverScrollableScrollPhysics()
+                                : (widget.gestureSpeed == 1.0
+                                    ? widget.physics
+                                    : _SpeedMultiplierPhysics(
+                                        speed: widget.gestureSpeed,
+                                        parent: widget.physics)),
+                            shrinkWrap: widget.shrinkWrap,
+                            addSemanticIndexes: widget.addSemanticIndexes,
+                            semanticChildCount: widget.semanticChildCount,
+                            padding: widget.padding,
+                            addAutomaticKeepAlives:
+                                widget.addAutomaticKeepAlives,
+                            addRepaintBoundaries: widget.addRepaintBoundaries,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         );
@@ -847,13 +862,15 @@ class _ZoomablePositionedListState extends State<ZoomablePositionedList>
     );
   }
 
-  double _cacheExtent(BoxConstraints constraints) => max(
-        (widget.scrollDirection == Axis.vertical
-                ? constraints.maxHeight
-                : constraints.maxWidth) *
-            _screenScrollCount,
-        widget.minCacheExtent ?? 0,
-      );
+  double _cacheExtent(BoxConstraints constraints) => widget.cacheExtent == null
+      ? max(
+          (widget.scrollDirection == Axis.vertical
+                  ? constraints.maxHeight
+                  : constraints.maxWidth) *
+              _screenScrollCount,
+          widget.minCacheExtent ?? 0,
+        )
+      : max(0, widget.cacheExtent!);
 
   void _jumpTo({required int index, required double alignment}) {
     _stopScroll(canceled: true);

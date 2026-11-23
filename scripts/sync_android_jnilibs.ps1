@@ -1,6 +1,6 @@
 param(
     [string]$Source = "build/rust-android-jni",
-    [string]$TargetDir = "",
+    [string]$TargetDir = $env:CARGO_TARGET_DIR,
     [string]$SourceLibName = "librust_lib_jasmine.so",
     [string]$DestLibName = "librust.so",
     [string[]]$Abi = @("arm64-v8a", "armeabi-v7a"),
@@ -9,8 +9,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$sourceWasSpecified = $PSBoundParameters.ContainsKey('Source')
+$targetWasSpecified = $PSBoundParameters.ContainsKey('TargetDir')
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+. (Join-Path $PSScriptRoot 'build_common.ps1')
 $destRoot = Join-Path $repoRoot "android/app/src/main/jniLibs"
 
 $abiMetadata = @{
@@ -83,7 +86,9 @@ function Get-SourceCandidates([string]$AbiName) {
     $names = @($SourceLibName, $DestLibName) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
     $candidates = New-Object System.Collections.Generic.List[string]
 
-    $sourceRoot = Resolve-RepoPath $Source
+    $sourceRoot = if ($sourceWasSpecified -or [string]::IsNullOrWhiteSpace($TargetDir)) {
+        Resolve-RepoPath $Source
+    } else { $null }
     if ($sourceRoot) {
         foreach ($name in $names) {
             $candidates.Add((Join-Path (Join-Path $sourceRoot $AbiName) $name))
@@ -91,13 +96,19 @@ function Get-SourceCandidates([string]$AbiName) {
     }
 
     $targetRoots = New-Object System.Collections.Generic.List[string]
-    $resolvedTarget = Resolve-RepoPath $TargetDir
+    $resolvedTarget = if (-not $sourceWasSpecified -or $targetWasSpecified) {
+        Resolve-RepoPath $TargetDir
+    } else { $null }
     if ($resolvedTarget) {
         $targetRoots.Add($resolvedTarget)
     }
-    $targetRoots.Add((Join-Path $repoRoot "rust-backend/rust/target"))
-    $targetRoots.Add((Join-Path $repoRoot "rust/target"))
-    $targetRoots.Add((Join-Path $repoRoot "target"))
+    # Explicit staging/target paths remain sufficient without a source checkout.
+    # Only use a crate fallback when no source root or target was specified.
+    $hasStagedLibrary = @($candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }).Count -gt 0
+    if (-not $sourceWasSpecified -and -not $resolvedTarget -and -not $hasStagedLibrary) {
+        $crate = Resolve-Jm3BackendCrate -BuildRoot $repoRoot
+        $targetRoots.Add((Join-Path $crate 'target'))
+    }
 
     foreach ($root in ($targetRoots | Select-Object -Unique)) {
         foreach ($name in $names) {

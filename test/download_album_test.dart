@@ -32,8 +32,9 @@ import 'package:jmcomic3/screens/comic_info_screen.dart';
 import 'package:jmcomic3/screens/comic_download_shared.dart';
 import 'package:jmcomic3/screens/download_import_shared.dart';
 import 'package:jmcomic3/screens/downloads_export_shared.dart';
-import 'package:jmcomic3/screens/components/images.dart';
 import 'package:jmcomic3/screens/components/search_history_shared.dart';
+import 'package:jmcomic3/basic/image_files.dart';
+import 'package:jmcomic3/basic/page_image_provider.dart';
 
 DownloadAlbum _downloadAlbumForTest(int id, {int status = 1}) {
   return DownloadAlbum.fromJson({
@@ -81,64 +82,64 @@ Categories _categoryForTest(int id) {
 }
 
 Map<String, dynamic> _comicSimpleFixture(int id) => {
-      'id': id,
-      'author': '作者',
-      'description': '简介',
-      'name': '漫画 $id',
-      'image': '$id.jpg',
-      'category': {'id': '1', 'title': '同人'},
-      'category_sub': {'id': '2', 'title': '汉化'},
-      'update_at': 1775974304,
-      'addtime': 1775974305,
-    };
+  'id': id,
+  'author': '作者',
+  'description': '简介',
+  'name': '漫画 $id',
+  'image': '$id.jpg',
+  'category': {'id': '1', 'title': '同人'},
+  'category_sub': {'id': '2', 'title': '汉化'},
+  'update_at': 1775974304,
+  'addtime': 1775974305,
+};
 
 Map<String, dynamic> _expInfoFixture(int uid) => {
-      'level_name': 'L3',
-      'level': 3,
-      'nextLevelExp': 100,
-      'exp': '66',
-      'expPercent': 66.6,
-      'uid': uid,
-      'badges': [
-        {'content': 'gold', 'name': 'VIP', 'id': 'vip'}
-      ],
-    };
+  'level_name': 'L3',
+  'level': 3,
+  'nextLevelExp': 100,
+  'exp': '66',
+  'expPercent': 66.6,
+  'uid': uid,
+  'badges': [
+    {'content': 'gold', 'name': 'VIP', 'id': 'vip'},
+  ],
+};
 
 Map<String, dynamic> _commentFixture({int cid = 456, int uid = 789}) => {
-      'AID': 123,
-      'CID': cid,
-      'UID': uid,
-      'username': 'alice',
-      'nickname': 'alice',
-      'likes': 3,
-      'gender': 'F',
-      'update_at': '1775974304',
-      'addtime': '2026-04-12',
-      'parent_CID': 0,
-      'expinfo': _expInfoFixture(uid),
-      'name': 'comic',
-      'content': 'root',
-      'photo': 'avatar.jpg',
-      'spoiler': 0,
-      'replys': <Map<String, dynamic>>[],
-    };
+  'AID': 123,
+  'CID': cid,
+  'UID': uid,
+  'username': 'alice',
+  'nickname': 'alice',
+  'likes': 3,
+  'gender': 'F',
+  'update_at': '1775974304',
+  'addtime': '2026-04-12',
+  'parent_CID': 0,
+  'expinfo': _expInfoFixture(uid),
+  'name': 'comic',
+  'content': 'root',
+  'photo': 'avatar.jpg',
+  'spoiler': 0,
+  'replys': <Map<String, dynamic>>[],
+};
 
 Map<String, dynamic> _gameFixture(int id) => {
-      'gid': id,
-      'title': '游戏 $id',
-      'description': '说明',
-      'tags': 'tag',
-      'link': 'https://game.example/$id',
-      'link_title': '开始',
-      'photo': '$id.jpg',
-      'type': <String>['h5'],
-      'categories': {'name': '热门', 'slug': 'hot'},
-      'update_at': 1775974304,
-      'total_clicks': 22,
-      'order_rank': 7,
-      'status': 1,
-      'show_lang': <String>['zh'],
-    };
+  'gid': id,
+  'title': '游戏 $id',
+  'description': '说明',
+  'tags': 'tag',
+  'link': 'https://game.example/$id',
+  'link_title': '开始',
+  'photo': '$id.jpg',
+  'type': <String>['h5'],
+  'categories': {'name': '热门', 'slug': 'hot'},
+  'update_at': 1775974304,
+  'total_clicks': 22,
+  'order_rank': 7,
+  'status': 1,
+  'show_lang': <String>['zh'],
+};
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -300,8 +301,10 @@ void main() {
 
     expect(create.containsChapterId(101), isTrue);
     expect(create.chapterById(101)?.name, 'first copy');
-    expect(
-        create.readerSeries.map((e) => e.name), ['first copy', 'second copy']);
+    expect(create.readerSeries.map((e) => e.name), [
+      'first copy',
+      'second copy',
+    ]);
   });
 
   test('DownloadCreate normalizes imported loose album and chapter fields', () {
@@ -388,13 +391,13 @@ void main() {
     final categories = decodeEntityResponse(
       jsonEncode({
         'categories': [
-          {'id': 1, 'name': '分类', 'slug': 'category', 'total_albums': 12}
+          {'id': 1, 'name': '分类', 'slug': 'category', 'total_albums': 12},
         ],
         'blocks': [
           {
             'title': '首页',
-            'content': ['category']
-          }
+            'content': ['category'],
+          },
         ],
       }),
       'categories',
@@ -420,7 +423,7 @@ void main() {
         'total_views': 99,
         'likes': 7,
         'series': [
-          {'id': 101, 'name': '第 1 话', 'sort': '1'}
+          {'id': 101, 'name': '第 1 话', 'sort': '1'},
         ],
         'series_id': 101,
         'comment_total': 11,
@@ -437,7 +440,7 @@ void main() {
       jsonEncode({
         'id': 101,
         'series': [
-          {'id': 101, 'name': '第 1 话', 'sort': '1'}
+          {'id': 101, 'name': '第 1 话', 'sort': '1'},
         ],
         'tags': 'tag',
         'name': '第 1 话',
@@ -461,7 +464,7 @@ void main() {
       jsonEncode({
         'list': [_comicSimpleFixture(100)],
         'folder_list': [
-          {'FID': 0, 'UID': 789, 'name': '默认'}
+          {'FID': 0, 'UID': 789, 'name': '默认'},
         ],
         'total': 1,
         'count': 1,
@@ -474,7 +477,7 @@ void main() {
         'games': [_gameFixture(10)],
         'games_total': '1',
         'categories': [
-          {'name': '热门', 'slug': 'hot'}
+          {'name': '热门', 'slug': 'hot'},
         ],
         'hot_games': [_gameFixture(11)],
       }),
@@ -484,10 +487,10 @@ void main() {
     final week = decodeEntityResponse(
       jsonEncode({
         'categories': [
-          {'id': '1', 'time': '04-13 ~ 04-20', 'title': '第1期'}
+          {'id': '1', 'time': '04-13 ~ 04-20', 'title': '第1期'},
         ],
         'type': [
-          {'id': '0', 'title': '全部'}
+          {'id': '0', 'title': '全部'},
         ],
       }),
       'week',
@@ -515,22 +518,24 @@ void main() {
     expect(week.categories.single.title, '第1期');
     expect(weekFilter.list.single.id, 100);
     expect(
-        ViewLog.fromJson({
-          'id': 100,
-          'author': '作者',
-          'description': '简介',
-          'name': '漫画 100',
-          'last_view_time': 1775974304,
-          'last_view_chapter_id': 101,
-          'last_view_page': 3,
-        }).lastViewPage,
-        3);
+      ViewLog.fromJson({
+        'id': 100,
+        'author': '作者',
+        'description': '简介',
+        'name': '漫画 100',
+        'last_view_time': 1775974304,
+        'last_view_chapter_id': 101,
+        'last_view_page': 3,
+      }).lastViewPage,
+      3,
+    );
     expect(
-        SearchHistory.fromJson({
-          'search_query': '姐姐',
-          'last_search_time': 1775974304,
-        }).searchQuery,
-        '姐姐');
+      SearchHistory.fromJson({
+        'search_query': '姐姐',
+        'last_search_time': 1775974304,
+      }).searchQuery,
+      '姐姐',
+    );
   });
 
   test('page image true size cache shares in-flight bridge request', () async {
@@ -560,8 +565,8 @@ void main() {
     clearAllImageMemoryCaches();
 
     final sizes = await Future.wait([
-      cachedPageImageTrueSizeForTest(20, '001.jpg', r'D:\cache\001.jpg'),
-      cachedPageImageTrueSizeForTest(20, '001.jpg', r'D:\cache\001.jpg'),
+      cachedPageImageTrueSize(20, '001.jpg', r'D:\cache\001.jpg'),
+      cachedPageImageTrueSize(20, '001.jpg', r'D:\cache\001.jpg'),
     ]);
 
     // 双页/预加载可能并发询问同一图片尺寸；缓存 Future 后只需一次跨端调用。
@@ -571,12 +576,15 @@ void main() {
     ]);
     expect(imageSizeCalls, 1);
 
-    final cached = await cachedPageImageTrueSizeForTest(
-        20, '001.jpg', r'D:\cache\001.jpg');
+    final cached = await cachedPageImageTrueSize(
+      20,
+      '001.jpg',
+      r'D:\cache\001.jpg',
+    );
     expect(cached.width, 800);
     expect(imageSizeCalls, 1);
 
-    await cachedPageImageTrueSizeForTest(
+    await cachedPageImageTrueSize(
       20,
       '001.jpg',
       r'D:\cache\001.jpg',
@@ -611,22 +619,20 @@ void main() {
   });
 
   test('search history panel normalizes blank and duplicate queries', () {
-    final histories = normalizeSearchHistoriesForPanel(
-      [
-        SearchHistory(searchQuery: ' alpha ', lastSearchTime: 10),
-        SearchHistory(searchQuery: '', lastSearchTime: 99),
-        SearchHistory(searchQuery: 'beta', lastSearchTime: 20),
-        SearchHistory(searchQuery: 'alpha', lastSearchTime: 30),
-      ],
-      limit: 2,
-    );
+    final histories = normalizeSearchHistoriesForPanel([
+      SearchHistory(searchQuery: ' alpha ', lastSearchTime: 10),
+      SearchHistory(searchQuery: '', lastSearchTime: 99),
+      SearchHistory(searchQuery: 'beta', lastSearchTime: 20),
+      SearchHistory(searchQuery: 'alpha', lastSearchTime: 30),
+    ], limit: 2);
 
     // 搜索面板只展示可点击查询词；重复词保留最新时间，并按后端列表顺序规则排序。
     expect(histories.map((e) => e.searchQuery), ['alpha', 'beta']);
     expect(histories.map((e) => e.lastSearchTime), [30, 20]);
     expect(
-        () => histories.add(SearchHistory(searchQuery: 'x', lastSearchTime: 1)),
-        throwsUnsupportedError);
+      () => histories.add(SearchHistory(searchQuery: 'x', lastSearchTime: 1)),
+      throwsUnsupportedError,
+    );
   });
 
   test('search panel query normalization rejects blank submissions', () {
@@ -689,8 +695,10 @@ void main() {
   });
 
   test('method response decoder treats known null object list as empty', () {
-    final list =
-        decodeMapListResponse('{"data":null}', 'last_search_histories');
+    final list = decodeMapListResponse(
+      '{"data":null}',
+      'last_search_histories',
+    );
 
     // 旧桥接有时用 data:null 表示空列表；只在命中约定列表字段时按空列表处理。
     expect(list, isEmpty);
@@ -739,11 +747,7 @@ void main() {
 
   test('method response decoder maps nullable entity payloads', () {
     expect(
-      decodeNullableEntityResponse(
-        'null',
-        'find_view_log',
-        ViewLog.fromJson,
-      ),
+      decodeNullableEntityResponse('null', 'find_view_log', ViewLog.fromJson),
       isNull,
     );
     final entity = decodeNullableEntityResponse(
@@ -754,11 +758,8 @@ void main() {
     expect(entity?.id, 7);
     expect(entity?.lastViewPage, 3);
     expect(
-      () => decodeNullableEntityResponse(
-        '[]',
-        'find_view_log',
-        ViewLog.fromJson,
-      ),
+      () =>
+          decodeNullableEntityResponse('[]', 'find_view_log', ViewLog.fromJson),
       throwsA(isA<FormatException>()),
     );
   });
@@ -773,19 +774,11 @@ void main() {
     expect(data.id, 7);
     expect(data.lastViewChapterId, 2);
     expect(
-      () => decodeEntityResponse(
-        'null',
-        'find_view_log',
-        ViewLog.fromJson,
-      ),
+      () => decodeEntityResponse('null', 'find_view_log', ViewLog.fromJson),
       throwsA(isA<FormatException>()),
     );
     expect(
-      () => decodeEntityResponse(
-        '[]',
-        'find_view_log',
-        ViewLog.fromJson,
-      ),
+      () => decodeEntityResponse('[]', 'find_view_log', ViewLog.fromJson),
       throwsA(isA<FormatException>()),
     );
   });
@@ -803,10 +796,7 @@ void main() {
       () => decodeMapResponse('[]', 'app_config'),
       throwsA(isA<FormatException>()),
     );
-    expect(
-      decodeMapResponse('null', 'app_config', nullAsEmpty: true),
-      isEmpty,
-    );
+    expect(decodeMapResponse('null', 'app_config', nullAsEmpty: true), isEmpty);
   });
 
   test('method response decoder unwraps nested JSON map payloads', () {
@@ -842,16 +832,20 @@ void main() {
       ' 频道 ': ' https://old.example/channel ',
       ' 关注频道入口 ': 'https://old.example/follow',
       '官网 ': ' https://example.com ',
+      '重复官网': 'https://example.com/#top',
       '空链接': '   ',
       '   ': 'https://blank-label.example',
     });
 
     expect(links['频道'], 'https://qm.qq.com/q/h3p372R200');
-    expect(links['关注频道入口'], 'https://qm.qq.com/q/h3p372R200');
+    expect(links.containsKey('关注频道入口'), isFalse);
+    expect(links.containsKey('重复官网'), isFalse);
     expect(links['官网'], 'https://example.com');
     expect(links.containsKey('空链接'), isFalse);
     expect(
-        () => links['新链接'] = 'https://example.com/new', throwsUnsupportedError);
+      () => links['新链接'] = 'https://example.com/new',
+      throwsUnsupportedError,
+    );
   });
 
   test('comic info ignores JM id placeholder from local view history', () {
@@ -905,8 +899,10 @@ void main() {
       final payload = jsonDecode(call.arguments as String);
       if (payload['method'] == 'load_property') {
         final key = payload['params']?.toString() ?? '';
-        return jsonEncode(
-            {'error_message': '', 'response_data': properties[key] ?? ''});
+        return jsonEncode({
+          'error_message': '',
+          'response_data': properties[key] ?? '',
+        });
       }
       if (payload['method'] == 'get_proxy') {
         return jsonEncode({
@@ -1054,10 +1050,7 @@ void main() {
       parseStringPropertyValue(jsonEncode(jsonEncode(' alice ')), trim: true),
       'alice',
     );
-    expect(
-      parseStringPropertyValue(jsonEncode('  secret  ')),
-      '  secret  ',
-    );
+    expect(parseStringPropertyValue(jsonEncode('  secret  ')), '  secret  ');
     expect(
       parseStringPropertyValue('"   "', fallback: 'fallback', trim: true),
       'fallback',
@@ -1078,37 +1071,39 @@ void main() {
     expect(normalizeAndroidDisplayModeValue('144.000', modes), '');
   });
 
-  test('sortCategories uses saved order without repeated index scans',
-      () async {
-    const channel = MethodChannel('methods');
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method != 'invoke') {
-        return null;
-      }
-      final payload = jsonDecode(call.arguments as String);
-      if (payload['method'] == 'load_property' &&
-          payload['params'] == 'categoriesSort') {
-        return '{"error_message":"","response_data":"[3,1]"}';
-      }
-      return '{"error_message":"","response_data":""}';
-    });
-    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+  test(
+    'sortCategories uses saved order without repeated index scans',
+    () async {
+      const channel = MethodChannel('methods');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method != 'invoke') {
+          return null;
+        }
+        final payload = jsonDecode(call.arguments as String);
+        if (payload['method'] == 'load_property' &&
+            payload['params'] == 'categoriesSort') {
+          return '{"error_message":"","response_data":"[3,1]"}';
+        }
+        return '{"error_message":"","response_data":""}';
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await initCategoriesSort();
-    final categories = [
-      _categoryForTest(1),
-      _categoryForTest(2),
-      _categoryForTest(3),
-      _categoryForTest(4),
-    ];
+      await initCategoriesSort();
+      final categories = [
+        _categoryForTest(1),
+        _categoryForTest(2),
+        _categoryForTest(3),
+        _categoryForTest(4),
+      ];
 
-    sortCategories(categories);
+      sortCategories(categories);
 
-    // 已保存排序优先，未命中的分类仍保持原始相对顺序。
-    expect(categories.map((item) => item.id), [3, 1, 2, 4]);
-  });
+      // 已保存排序优先，未命中的分类仍保持原始相对顺序。
+      expect(categories.map((item) => item.id), [3, 1, 2, 4]);
+    },
+  );
 
   test('categories sort decodes nested json array property', () async {
     const channel = MethodChannel('methods');
@@ -1142,10 +1137,7 @@ void main() {
       _categoryForTest(2),
       _categoryForTest(3),
     ];
-    expect(
-      restoreCategoriesSortSelection([3, 3, 99, 1], categories),
-      [3, 1],
-    );
+    expect(restoreCategoriesSortSelection([3, 3, 99, 1], categories), [3, 1]);
 
     const channel = MethodChannel('methods');
     final messenger =
@@ -1231,9 +1223,7 @@ void main() {
 
   test('method response decoder shares platform list normalization', () {
     final modes = decodeStringListValue(
-      {
-        'modes': '[" 60Hz ", "60Hz", null, " 90Hz "]',
-      },
+      {'modes': '[" 60Hz ", "60Hz", null, " 90Hz "]'},
       'androidGetModes',
       dedupe: true,
     );
@@ -1266,8 +1256,9 @@ void main() {
         case 'load_api_host':
           return jsonEncode({
             'error_message': '',
-            'response_data':
-                jsonEncode(' https://API.example.com/path?from=legacy '),
+            'response_data': jsonEncode(
+              ' https://API.example.com/path?from=legacy ',
+            ),
           });
         case 'save_api_host':
           savedHosts.add(payload['params'] as String);
@@ -1296,8 +1287,10 @@ void main() {
       ),
       'wrapped.example.com',
     );
-    expect(normalizeApiHostCandidate(' /empty ', fallback: 'fallback'),
-        'fallback');
+    expect(
+      normalizeApiHostCandidate(' /empty ', fallback: 'fallback'),
+      'fallback',
+    );
   });
 
   test('CDN host init normalizes URL-like values before saving', () async {
@@ -1372,6 +1365,22 @@ void main() {
   });
 
   test('download export selection toggles and restores by live ids', () {
+    final downloads = List.generate(
+      5,
+      (status) => _downloadAlbumForTest(status, status: status),
+    );
+    expect(
+      downloads
+          .where(DownloadExportScope.completed.accepts)
+          .map((album) => album.id),
+      [1],
+    );
+    expect(
+      downloads
+          .where(DownloadExportScope.includingIncomplete.accepts)
+          .map((album) => album.id),
+      [0, 1, 2, 4],
+    );
     final selected = <int>{};
 
     toggleSelectedDownloadId(selected, 3);
@@ -1388,10 +1397,7 @@ void main() {
     );
 
     expect(restored.toList(), [1, 2]);
-    expect(
-      restoreSelectedIds([3, 1, 2], [_downloadAlbumForTest(1)]),
-      [1],
-    );
+    expect(restoreSelectedIdSet({3, 1, 2}, [_downloadAlbumForTest(1)]), {1});
   });
 
   test('download import archive detection only accepts backend formats', () {
@@ -1476,45 +1482,47 @@ void main() {
     expect(modes, ['60Hz', '120']);
   });
 
-  test('Methods.loadAndroidModes supports object payload with modes list',
-      () async {
-    const channel = MethodChannel('methods');
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'androidGetModes') {
-        return {
-          'modes': [' 60Hz ', null, '120Hz', '60Hz']
-        };
-      }
-      return null;
-    });
-    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+  test(
+    'Methods.loadAndroidModes supports object payload with modes list',
+    () async {
+      const channel = MethodChannel('methods');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'androidGetModes') {
+          return {
+            'modes': [' 60Hz ', null, '120Hz', '60Hz'],
+          };
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final modes = await methods.loadAndroidModes();
+      final modes = await methods.loadAndroidModes();
 
-    expect(modes, ['60Hz', '120Hz']);
-  });
+      expect(modes, ['60Hz', '120Hz']);
+    },
+  );
 
-  test('Methods.loadAndroidModes supports object payload with json list string',
-      () async {
-    const channel = MethodChannel('methods');
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'androidGetModes') {
-        return {
-          'mode_list': '[" 90Hz ","120Hz","90Hz"]',
-        };
-      }
-      return null;
-    });
-    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+  test(
+    'Methods.loadAndroidModes supports object payload with json list string',
+    () async {
+      const channel = MethodChannel('methods');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'androidGetModes') {
+          return {'mode_list': '[" 90Hz ","120Hz","90Hz"]'};
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final modes = await methods.loadAndroidModes();
+      final modes = await methods.loadAndroidModes();
 
-    expect(modes, ['90Hz', '120Hz']);
-  });
+      expect(modes, ['90Hz', '120Hz']);
+    },
+  );
 
   test('Methods.loadAndroidModes falls back on platform exceptions', () async {
     const channel = MethodChannel('methods');
@@ -1523,7 +1531,9 @@ void main() {
     messenger.setMockMethodCallHandler(channel, (call) async {
       if (call.method == 'androidGetModes') {
         throw PlatformException(
-            code: 'unavailable', message: 'no display mode');
+          code: 'unavailable',
+          message: 'no display mode',
+        );
       }
       return null;
     });
@@ -1553,46 +1563,50 @@ void main() {
     expect(modeArg, '120Hz');
   });
 
-  test('Methods.set_download_thread forwards thread count to backend',
-      () async {
-    const channel = MethodChannel('methods');
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    String? invokedParams;
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method != 'invoke') {
-        return null;
-      }
-      final payload = jsonDecode(call.arguments as String);
-      invokedParams = payload['params']?.toString();
-      return '{"error_message":"","response_data":""}';
-    });
-    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+  test(
+    'Methods.set_download_thread forwards thread count to backend',
+    () async {
+      const channel = MethodChannel('methods');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      String? invokedParams;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method != 'invoke') {
+          return null;
+        }
+        final payload = jsonDecode(call.arguments as String);
+        invokedParams = payload['params']?.toString();
+        return '{"error_message":"","response_data":""}';
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await methods.set_download_thread(99);
+      await methods.set_download_thread(99);
 
-    // 线程范围由后端统一归一化，前端只传递用户请求，避免双份边界常量漂移。
-    expect(invokedParams, '99');
-  });
+      // 线程范围由后端统一归一化，前端只传递用户请求，避免双份边界常量漂移。
+      expect(invokedParams, '99');
+    },
+  );
 
-  test('Methods.load_download_thread falls back when payload is invalid',
-      () async {
-    const channel = MethodChannel('methods');
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method != 'invoke') {
-        return null;
-      }
-      return '{"error_message":"","response_data":"invalid-int"}';
-    });
-    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+  test(
+    'Methods.load_download_thread falls back when payload is invalid',
+    () async {
+      const channel = MethodChannel('methods');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method != 'invoke') {
+          return null;
+        }
+        return '{"error_message":"","response_data":"invalid-int"}';
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final value = await methods.load_download_thread();
+      final value = await methods.load_download_thread();
 
-    // 历史配置损坏时回退到最小线程数，避免 UI 初始化阶段直接抛异常。
-    expect(value, 1);
-  });
+      // 历史配置损坏时回退到最小线程数，避免 UI 初始化阶段直接抛异常。
+      expect(value, 1);
+    },
+  );
 
   test('Methods.load_download_thread preserves backend payload', () async {
     const channel = MethodChannel('methods');
@@ -1612,41 +1626,45 @@ void main() {
     expect(value, 99);
   });
 
-  test('Methods.load_download_thread accepts nested json string payload',
-      () async {
-    const channel = MethodChannel('methods');
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method != 'invoke') {
-        return null;
-      }
-      return '{"error_message":"","response_data":"\\"4\\""}';
-    });
-    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+  test(
+    'Methods.load_download_thread accepts nested json string payload',
+    () async {
+      const channel = MethodChannel('methods');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method != 'invoke') {
+          return null;
+        }
+        return '{"error_message":"","response_data":"\\"4\\""}';
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final value = await methods.load_download_thread();
+      final value = await methods.load_download_thread();
 
-    // 兼容旧桥接把数字包成 JSON 字符串的情况，避免初始化时误回退到默认值。
-    expect(value, 4);
-  });
+      // 兼容旧桥接把数字包成 JSON 字符串的情况，避免初始化时误回退到默认值。
+      expect(value, 4);
+    },
+  );
 
-  test('Methods.load_download_thread accepts nested decimal string payload',
-      () async {
-    const channel = MethodChannel('methods');
-    final messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(channel, (call) async {
-      if (call.method != 'invoke') {
-        return null;
-      }
-      return '{"error_message":"","response_data":"\\"4.0\\""}';
-    });
-    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+  test(
+    'Methods.load_download_thread accepts nested decimal string payload',
+    () async {
+      const channel = MethodChannel('methods');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method != 'invoke') {
+          return null;
+        }
+        return '{"error_message":"","response_data":"\\"4.0\\""}';
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    final value = await methods.load_download_thread();
+      final value = await methods.load_download_thread();
 
-    // 某些旧桥接会把整数写成字符串小数，兼容解析可避免线程配置被错误回退。
-    expect(value, 4);
-  });
+      // 某些旧桥接会把整数写成字符串小数，兼容解析可避免线程配置被错误回退。
+      expect(value, 4);
+    },
+  );
 }

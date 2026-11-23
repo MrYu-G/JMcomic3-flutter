@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../basic/commons.dart';
+import 'package:jmcomic3/basic/app_links.dart';
 import '../../configs/disable_recommend_content.dart';
 import '../../configs/is_pro.dart';
 import '../../configs/recommend_links.dart';

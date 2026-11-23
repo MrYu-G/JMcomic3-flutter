@@ -39,6 +39,7 @@ import 'network_api_host.dart';
 import 'network_cdn_host.dart';
 import 'reader_controller_type.dart';
 import 'reader_direction.dart';
+import 'reader_preload.dart';
 import 'reader_slider_position.dart';
 import 'reader_type.dart';
 import 'versions.dart';
@@ -58,6 +59,7 @@ Future initConfigs(BuildContext context) async {
   await initReaderType();
   await initTwoPageDirection();
   await initReaderDirection();
+  await initReaderPreload();
   await initReaderControllerType();
   await initReaderSliderPosition();
   await initPagerColumnCount();

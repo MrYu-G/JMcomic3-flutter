@@ -1,24 +1,39 @@
-v1.7.26+55
+v1.7.43+72
+
+## 重要：Android 需要重新安装
+
+本版启用新的 Android 签名密钥，无法覆盖安装 v1.7.26+55 及更早版本。请先在旧版中
+导出下载或开启 WebDAV 同步备份数据，卸载旧版后再安装本版。Windows 不受影响。
 
 ## 更新内容
 
-- 重写阅读器缩放、连续阅读、快速跳页和实际可见页进度保存。
-- 修复收藏尾页导致总页数膨胀，改善浏览历史和短列表自动补页。
-- 重写漫画详情页，增加适配明暗主题的彩色标签与流式章节目录。
-- 整理个人中心、导航、字体和阅读进度条，保留紧凑的手机布局。
-- 重写中英文文档，清理退役计划与失效构建流程，补充上游引用。
+- 更新安全：只从官方 GitHub 仓库获取版本信息，拒绝错误仓库、非法版本和降级；
+  安装包通过大小与 SHA-256 校验后才保存，下载可取消和重试。
+- 阅读器：图片优先使用缓存并合并重复请求，退出时清理临时图片；修复底部进度条
+  占满屏幕、页码抖动和跨章节后的网络与电池显示。
+- 下载：新增暂停与继续，显示实际保存目录；批量导出支持失败重试并保留有效选择。
+- 登录：重做登录页与登录弹窗，登录过期后自动重新认证并重试一次；失败时显示
+  简洁的中英文提示。
+- 收藏夹：修复在线收藏资料夹的创建、删除、重命名和漫画移动。
+- 界面：压缩个人中心、设置、下载、缓存和阅读器面板的留白，保留 48 像素触控目标。
+- 图片缓存：按日期查看占用空间，支持多选清理且不影响下载文件。
+- 升级 Flutter 3.50.1 / Dart 3.14 与第三方依赖，Rust 后端同步升级。
+
+完整记录见 [CHANGELOG.md](https://github.com/MrYu-G/JMcomic3-flutter/blob/main/CHANGELOG.md)。
 
 ## 下载
 
-- Android：ARM64 APK、ARM32 APK 与 AAB，均为本地 release 构建。
-- Windows：x64 portable ZIP，完整解压后运行 jmcomic3.exe。
+- Android ARM64：`Jmcomic3-arm64-v8a-v1.7.43+72.apk`，适用于大多数手机。
+- Android ARM32：`Jmcomic3-armeabi-v7a-v1.7.43+72.apk`，适用于 32 位设备。
+- Android 通用包：`Jmcomic3-universal-v1.7.43+72.apk`，同时包含以上两种架构，
+  体积更大，不确定架构时使用。
+- Windows x64：`Jmcomic3-windows-x64-v1.7.43+72.zip`，完整解压后运行 jmcomic3.exe。
 - SHA256SUMS.txt 用于校验附件；build-info.json 记录源码、工具链和验证结果。
 
-Android 沿用已发布 v1.7.25+54 的签名密钥。请使用相同架构的 APK 覆盖更新；更早使用
-旧密钥的安装需要先备份数据，再卸载并重新安装。Windows 可执行文件未做代码签名。
+Windows 可执行文件未做代码签名。
 
 ## 引用与致谢
 
 - [ComicSparks/jasmine](https://github.com/ComicSparks/jasmine)：Flutter 阅读器结构和阅读交互参考。
 - [hect0x7/JMComic-Crawler-Python](https://github.com/hect0x7/JMComic-Crawler-Python)：Rust 后端 API 协议、签名、请求头及登录参考。
-- 详细范围与第三方声明见 [REFERENCES.md](https://github.com/MrYu-JMComic/JMcomic3-flutter/blob/main/REFERENCES.md)。
+- 详细范围与第三方声明见 [REFERENCES.md](https://github.com/MrYu-G/JMcomic3-flutter/blob/main/REFERENCES.md)。

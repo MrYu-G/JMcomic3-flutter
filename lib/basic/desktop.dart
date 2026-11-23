@@ -1,7 +1,8 @@
 import 'dart:io';
 
 import 'package:jmcomic3/basic/methods.dart';
-import 'package:window_manager/window_manager.dart';
+// The compatibility API preserves the existing single-window lifecycle.
+import 'package:window_manager/legacy.dart';
 
 onDesktopStart() {
   if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../basic/commons.dart';
+import 'package:jmcomic3/screens/components/dialogs.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import 'package:jmcomic3/basic/log.dart';
 import '../basic/methods.dart';
 import '../configs/is_pro.dart';

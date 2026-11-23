@@ -2,7 +2,7 @@ import 'package:event/event.dart';
 import 'package:flutter/material.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 
-import '../basic/commons.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import '../basic/methods.dart';
 import 'bool_property.dart';
 import 'is_pro.dart';

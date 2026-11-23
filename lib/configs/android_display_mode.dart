@@ -7,7 +7,7 @@ import 'package:jmcomic3/basic/methods.dart';
 import 'package:jmcomic3/configs/android_version.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 
-import '../basic/commons.dart';
+import 'package:jmcomic3/screens/components/dialogs.dart';
 import 'string_property.dart';
 
 const _propertyName = "androidDisplayMode";

@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:jmcomic3/basic/methods.dart';
 import 'package:jmcomic3/l10n/app_localizations.dart';
 
-import '../basic/commons.dart';
+import 'package:jmcomic3/screens/components/dialogs.dart';
+import 'package:jmcomic3/screens/components/feedback.dart';
 import '../configs/export_path.dart';
 import '../configs/export_rename.dart';
 import '../configs/is_pro.dart';
