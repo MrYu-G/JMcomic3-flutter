@@ -398,3 +398,18 @@ tasks.matching { it.name == 'preBuild' }.configureEach {
 tasks.matching { it.name ==~ /merge.*JniLibFolders/ }.configureEach {
     dependsOn('validateRustJniLibs')
 }
+
+androidComponents {
+    onVariants(selector().withBuildType('release')) { variant ->
+        // Flutter adds every platform ABI to defaultConfig.ndk.abiFilters and
+        // AGP merges that with the release filter above, so the tracked
+        // emulator library would still be packaged. Exclude unrequested ABIs.
+        (['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'] - rustAndroidReleaseAbis).each { abi ->
+            variant.packaging.jniLibs.excludes.add("lib/${abi}/**".toString())
+        }
+        // Store native libraries compressed. Release packages are downloaded
+        // directly rather than through a store that compresses them, so this
+        // roughly halves the download; Android extracts them at install time.
+        variant.packaging.jniLibs.useLegacyPackaging.set(true)
+    }
+}

@@ -22,6 +22,8 @@ function Get-Jm3ReleaseEntryViolation {
     if ($name -match '(^|/)(secrets?|credentials?|signing|\.ssh|\.aws|\.azure|frb_store_parts)(/|$)|(^|/)(\.env(?:\.[^/]*)?|key\.properties(?:\.[^/]*)?|id_(rsa|ed25519|ecdsa|dsa)(?:\.pub)?|(?:credentials?|passwords?|cookies?|tokens?)\.(?:json|ya?ml|txt|toml|ini)|service[-_]account[^/]*\.json|client_secret[^/]*\.json|frb_store\.json)$|\.(jks|keystore|p12|pfx|pem|key|p8|kdbx|(?:db|sqlite3?)(?:-(?:wal|shm|journal))?)$') {
         return 'signing credentials or private application state'
     }
+    # AGP writes its own version marker under a path containing "build".
+    if ($name -ceq 'META-INF/com/android/build/gradle/app-metadata.properties') { return $null }
     if ($name -match '(^|/)(test|tests|integration_test|test_driver|screenshots?|captures?|acceptance|verification|test-output|test-results|coverage|checks|build|dist|target|\.dart_tool|\.smoke-data|_cache|_flutter|_android-sdk|toolchains)(/|$)|\.(log|bak)$') {
         return 'test evidence or local build output'
     }
