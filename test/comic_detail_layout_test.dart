@@ -69,6 +69,9 @@ const _tags = [
 ];
 final _saveScreenshots = Platform.environment['DETAIL_SCREENSHOTS'] == '1';
 
+/// Native integration captures the same asserted states while requests wait.
+Future<void> Function(String name, WidgetTester tester)? detailCheckpoint;
+
 AlbumResponse _album({
   int id = _albumId,
   String name = _longTitle,
@@ -146,7 +149,11 @@ class _Fixture {
   String? favoriteError;
   String favoriteType = 'add';
   Completer<void>? favoriteGate;
+  Completer<void>? albumGate;
+  Completer<void>? listingDateGate;
   Completer<void>? viewLogGate;
+  int? listingDate;
+  String? listingDateError;
   String? coverPath;
   final requests = <Map<String, dynamic>>[];
   final _pendingCover = Completer<String>();
@@ -218,14 +225,19 @@ class _Fixture {
           'pro_info_pat': {'is_pro': true},
         });
       case 'album':
+        final albumResponse = album.toJson();
+        await albumGate?.future;
         if (albumFailures > 0) {
           albumFailures--;
           return _response('', error: 'network unavailable');
         }
-        return _response(album.toJson());
+        return _response(albumResponse);
       case 'find_view_log':
         if (viewLogGate != null) await viewLogGate!.future;
         return _response(viewLog?.toJson());
+      case 'album_listing_date':
+        await listingDateGate?.future;
+        return _response(listingDate, error: listingDateError ?? '');
       case 'forum':
         return _response({'list': <Object>[], 'total': 0});
       case 'download_by_id':
@@ -386,6 +398,13 @@ Future<_Fixture> _prepare(
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
   addTearDown(() async {
+    if (fixture.albumGate != null && !fixture.albumGate!.isCompleted) {
+      fixture.albumGate!.complete();
+    }
+    if (fixture.listingDateGate != null &&
+        !fixture.listingDateGate!.isCompleted) {
+      fixture.listingDateGate!.complete();
+    }
     if (fixture.favoriteGate != null && !fixture.favoriteGate!.isCompleted) {
       fixture.favoriteGate!.complete();
     }
@@ -463,11 +482,25 @@ Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _pumpUntil(
+  WidgetTester tester,
+  bool Function() complete, {
+  required String reason,
+}) async {
+  // Pending-request spinners prevent pumpAndSettle. Advance only until the
+  // finite route or interaction state finishes, retaining the request gates.
+  for (var frame = 0; frame < 120 && !complete(); frame++) {
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  expect(complete(), isTrue, reason: reason);
+}
+
 Future<void> _capture(
   WidgetTester tester,
   String name, {
   bool settle = true,
 }) async {
+  await detailCheckpoint?.call(name, tester);
   if (!_saveScreenshots) return;
   if (settle) {
     await tester.runAsync(() async {
@@ -501,6 +534,13 @@ void _expectFilledChapterRows(WidgetTester tester, List<Series> chapters) {
     expect(row.first.left, closeTo(panel.left + 12, .001));
     expect(row.last.right, closeTo(panel.right - 12, .001));
   }
+}
+
+double _minimumChapterButtonHeight(WidgetTester tester) {
+  final theme = Theme.of(tester.element(find.byType(ComicDetailChapters)));
+  // Preserve 48px touch controls on Android and the app's compact Material
+  // density on Windows, which reduces the same minimum by eight pixels.
+  return 48 + theme.visualDensity.baseSizeAdjustment.dy;
 }
 
 void main() {
@@ -575,6 +615,288 @@ void main() {
         ));
       },
     );
+  });
+
+  for (final layout in [
+    (
+      name: 'pending-detail-compact',
+      size: const Size(390, 844),
+      scale: 1.0,
+      dark: false,
+      locale: const Locale('en'),
+      labels: ['Chapters', 'Comments', 'Recommended'],
+    ),
+    (
+      name: 'pending-detail-expanded',
+      size: const Size(1000, 800),
+      scale: 1.0,
+      dark: true,
+      locale: const Locale('zh', 'CN'),
+      labels: ['章节', '评论', '推荐'],
+    ),
+    (
+      name: 'pending-detail-compact-large-text',
+      size: const Size(320, 844),
+      scale: 2.0,
+      dark: true,
+      locale: const Locale('en'),
+      labels: ['Chapters', 'Comments', 'Recommended'],
+    ),
+  ]) {
+    testWidgets('${layout.name} paints the frame before requests complete', (
+      tester,
+    ) async {
+      final fixture = await _prepare(tester, size: layout.size);
+      fixture.albumGate = Completer<void>();
+      fixture.viewLogGate = Completer<void>();
+      // Push from the previous screen rather than mounting a completed detail.
+      await tester.pumpWidget(
+        _host(
+          const Scaffold(body: SizedBox(key: ValueKey('detail-login-context'))),
+          textScale: layout.scale,
+          dark: layout.dark,
+          locale: layout.locale,
+        ),
+      );
+      final navigator = Navigator.of(
+        tester.element(find.byKey(const ValueKey('detail-login-context'))),
+      );
+      unawaited(
+        navigator.push<void>(
+          MaterialPageRoute(
+            builder: (_) => ComicInfoScreen(fixture.album.id, _simple()),
+          ),
+        ),
+      );
+      await tester.pump();
+      // Navigator installs the route at the end of a frame; paint it while
+      // the album, cover and history requests are still explicitly gated.
+      await tester.pump();
+      expect(_key('title'), findsOneWidget);
+      expect(_key('cover'), findsOneWidget);
+      final title = tester.widget<Text>(_key('title'));
+      expect(title.data ?? title.textSpan!.toPlainText(), 'Stale cached title');
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(fixture.calls('album'), hasLength(1));
+      expect(fixture.calls('find_view_log'), hasLength(1));
+      expect(tester.widget<TextButton>(_key('download')).onPressed, isNull);
+      expect(tester.widget<TextButton>(_key('favorite')).onPressed, isNull);
+      expect(tester.widget<FilledButton>(_key('read')).onPressed, isNull);
+      for (var index = 0; index < layout.labels.length; index++) {
+        expect(tester.widget<InkWell>(_key('tab-$index')).onTap, isNull);
+        expect(
+          find.descendant(
+            of: _key('tab-$index'),
+            matching: find.text(layout.labels[index]),
+          ),
+          findsOneWidget,
+        );
+      }
+      for (final action in ['download', 'favorite', 'read']) {
+        final bounds = tester.getRect(_key(action));
+        expect(bounds.left, greaterThanOrEqualTo(0));
+        expect(bounds.right, lessThanOrEqualTo(layout.size.width));
+        expect(bounds.bottom, lessThanOrEqualTo(layout.size.height));
+      }
+      expect(fixture.calls('forum'), isEmpty);
+      expect(fixture.calls('download_by_id'), isEmpty);
+      await _capture(tester, layout.name, settle: false);
+
+      fixture.albumGate!.complete();
+      await tester.pumpAndSettle();
+      final loadedTitle = tester.widget<Text>(_key('title'));
+      expect(loadedTitle.textSpan!.toPlainText(), _longTitle);
+      expect(tester.widget<TextButton>(_key('download')).onPressed, isNotNull);
+      expect(tester.widget<FilledButton>(_key('read')).onPressed, isNull);
+      // Neither a pending cover nor history holds up album metadata.
+      expect(fixture.calls('forum'), isEmpty);
+      fixture.viewLogGate!.complete();
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(_key('read')).onPressed, isNotNull);
+      expect(fixture.calls('album'), hasLength(1));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+    'pending detail supports back before the album request finishes',
+    (tester) async {
+      final fixture = await _prepare(tester);
+      fixture.albumGate = Completer<void>();
+      final context = tester.element(
+        find.byKey(const ValueKey('detail-login-context')),
+      );
+      unawaited(
+        Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => ComicInfoScreen(_albumId, _simple()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      final route = ModalRoute.of(
+        tester.element(find.byType(ComicInfoScreen)),
+      )!;
+      await _pumpUntil(
+        tester,
+        () => route.animation!.isCompleted,
+        reason: 'The details route entrance finishes while album data waits',
+      );
+      await tester.tap(find.byTooltip('Back'));
+      await _pumpUntil(
+        tester,
+        () => find.byType(ComicInfoScreen).evaluate().isEmpty,
+        reason:
+            'Back exits the details route before its album request finishes',
+      );
+      expect(find.byType(ComicInfoScreen), findsNothing);
+      expect(
+        find.byKey(const ValueKey('detail-login-context')),
+        findsOneWidget,
+      );
+      fixture.albumGate!.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(ComicInfoScreen), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('ID-only detail paints a localized frame without invented data', (
+    tester,
+  ) async {
+    final fixture = await _prepare(tester);
+    fixture.albumGate = Completer<void>();
+    await tester.pumpWidget(_host(const ComicInfoScreen(_albumId, null)));
+    await tester.pump();
+    expect(find.text('Comic details'), findsOneWidget);
+    expect(find.text('Stale cached title'), findsNothing);
+    expect(find.textContaining('Published'), findsNothing);
+    expect(find.textContaining('Updated'), findsNothing);
+    expect(_key('cover'), findsOneWidget);
+    expect(tester.widget<FilledButton>(_key('read')).onPressed, isNull);
+    await _capture(tester, 'pending-detail-id-only', settle: false);
+    fixture.albumGate!.complete();
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(_key('title')).textSpan!.toPlainText(),
+      _longTitle,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('switching pending comic IDs ignores the old album completion', (
+    tester,
+  ) async {
+    final fixture = await _prepare(tester);
+    final firstGate = Completer<void>();
+    fixture.albumGate = firstGate;
+    await tester.pumpWidget(_host(const ComicInfoScreen(_albumId, null)));
+    await tester.pump();
+    final secondAlbum = _album(id: 90001, name: 'New comic title');
+    fixture.album = secondAlbum;
+    fixture.albumGate = Completer<void>();
+    await tester.pumpWidget(_host(ComicInfoScreen(secondAlbum.id, null)));
+    await tester.pump();
+    firstGate.complete();
+    await tester.pump();
+    expect(find.text(_longTitle), findsNothing);
+    expect(find.byType(ComicDetailHeader), findsNothing);
+    fixture.albumGate!.complete();
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(_key('title')).textSpan!.toPlainText(),
+      secondAlbum.name,
+    );
+    expect(fixture.calls('album'), hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('failed detail retains the frame through a pending retry', (
+    tester,
+  ) async {
+    final fixture = await _prepare(tester);
+    fixture.albumFailures = 1;
+    await _mount(tester, fixture);
+    expect(_key('title'), findsOneWidget);
+    expect(_key('cover'), findsOneWidget);
+    expect(_key('retry'), findsOneWidget);
+    expect(tester.widget<FilledButton>(_key('read')).onPressed, isNull);
+    await _capture(tester, 'failed-detail-frame');
+    fixture.albumGate = Completer<void>();
+    await tester.tap(_key('retry'));
+    await tester.pump();
+    await tester.pump();
+    expect(_key('retry'), findsNothing);
+    expect(_key('title'), findsOneWidget);
+    expect(tester.widget<TextButton>(_key('download')).onPressed, isNull);
+    expect(tester.widget<FilledButton>(_key('read')).onPressed, isNull);
+    expect(fixture.calls('album'), hasLength(2));
+    fixture.albumGate!.complete();
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(_key('title')).textSpan!.toPlainText(),
+      _longTitle,
+    );
+    expect(tester.widget<FilledButton>(_key('read')).onPressed, isNotNull);
+    expect(fixture.calls('forum'), isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'listing date enrichment does not hold album content or actions',
+    (tester) async {
+      final fixture = await _prepare(tester);
+      fixture.album = AlbumResponse.fromJson({
+        ...fixture.album.toJson(),
+        'addtime': null,
+      });
+      fixture.listingDate =
+          DateTime(2026, 9, 7, 12).millisecondsSinceEpoch ~/ 1000;
+      fixture.listingDateGate = Completer<void>();
+      await _mount(tester, fixture);
+      expect(
+        tester.widget<Text>(_key('title')).textSpan!.toPlainText(),
+        _longTitle,
+      );
+      expect(tester.widget<FilledButton>(_key('read')).onPressed, isNotNull);
+      expect(tester.widget<TextButton>(_key('download')).onPressed, isNotNull);
+      expect(find.textContaining('Published'), findsNothing);
+      expect(fixture.calls('album_listing_date'), hasLength(1));
+      final albumParams =
+          jsonDecode(fixture.calls('album').single['params'] as String) as Map;
+      expect(albumParams['include_listing_date'], isFalse);
+      await _capture(tester, 'detail-pending-listing-date');
+      fixture.listingDateGate!.complete();
+      await tester.pumpAndSettle();
+      // The metadata's icon contributes a WidgetSpan before its visible text.
+      expect(find.textContaining('Published 2026-09-07'), findsOneWidget);
+      expect(tester.widget<FilledButton>(_key('read')).onPressed, isNotNull);
+      expect(fixture.calls('album'), hasLength(1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('listing date failure preserves usable album content', (
+    tester,
+  ) async {
+    final fixture = await _prepare(tester);
+    fixture.album = AlbumResponse.fromJson({
+      ...fixture.album.toJson(),
+      'addtime': null,
+    });
+    fixture.listingDateError = 'listing website unavailable';
+    await _mount(tester, fixture);
+    expect(
+      tester.widget<Text>(_key('title')).textSpan!.toPlainText(),
+      _longTitle,
+    );
+    expect(find.textContaining('Published'), findsNothing);
+    expect(_key('retry'), findsNothing);
+    expect(tester.widget<FilledButton>(_key('read')).onPressed, isNotNull);
+    expect(tester.widget<TextButton>(_key('download')).onPressed, isNotNull);
+    expect(fixture.calls('album_listing_date'), hasLength(1));
+    expect(tester.takeException(), isNull);
   });
 
   for (final layout in [
@@ -929,10 +1251,14 @@ void main() {
         final rect = tester.getRect(_key('chapter-${chapter.id}'));
         expect(rect.top, closeTo(first.top, .001));
         expect(rect.width, lessThan(panel.width / 3));
-        expect(rect.height, greaterThanOrEqualTo(48));
+        expect(
+          rect.height,
+          greaterThanOrEqualTo(_minimumChapterButtonHeight(tester)),
+        );
         expect(find.text(chapter.sort), findsOneWidget);
       }
       _expectFilledChapterRows(tester, chapters);
+      await _capture(tester, 'detail-numbered-chapter-controls');
       await _tapVisible(tester, _key('chapter-${chapters[3].id}'));
       expect(reads, [(chapters[3].id, 0)]);
       expect(tester.takeException(), isNull);
@@ -1005,11 +1331,15 @@ void main() {
               : '${chapter.sort} - ${chapter.name}';
           expect(find.text(title), findsOneWidget);
           expect(tester.widget<Text>(find.text(title)).maxLines, isNull);
-          expect(rect.height, greaterThanOrEqualTo(48));
+          expect(
+            rect.height,
+            greaterThanOrEqualTo(_minimumChapterButtonHeight(tester)),
+          );
           expect(rect.left, greaterThanOrEqualTo(panel.left));
           expect(rect.right, lessThanOrEqualTo(panel.right));
         }
         expect(tester.takeException(), isNull);
+        await _capture(tester, 'detail-named-chapter-controls-${scale}x');
       }
       await _tapVisible(tester, _key('chapter-${chapters[1].id}'));
       expect(reads, [(chapters[1].id, 0)]);

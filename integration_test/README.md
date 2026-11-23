@@ -55,3 +55,17 @@ flutter test --no-pub integration_test/login_layout_test.dart -d windows
 截图来自实际原生引擎的 RepaintBoundary，不含系统窗口边框。紧凑尺寸及键盘 inset
 由测试设置，不能替代 Android 真机键盘、系统栏或输入法验收。截图仍只保存在本地；
 不提交、不上传。Windows 构建前置条件见 [BUILDING.md](../docs/BUILDING.md)。
+
+## Windows 漫画详情加载回归
+
+`comic_detail_layout_test.dart` 复用详情控件回归，在原生 Flutter 引擎中检查待完成请求下
+的页面框架、返回、失败重试和独立上架日期补充。后端响应全部来自合成夹具。
+
+```powershell
+. .\scripts\enter_build_env.ps1 -Target Windows
+flutter test --no-pub integration_test/comic_detail_layout_test.dart -d windows
+```
+
+追加 `--dart-define=DETAIL_CAPTURE_DIR=<仓库绝对路径>/build/checks/detail-loading/native`
+可保存检查点截图。紧凑/宽屏和中英文状态由测试设置；Windows 截图不代替 Android
+设备、系统栏或真实服务验收。截图仅保存在本地输出目录。

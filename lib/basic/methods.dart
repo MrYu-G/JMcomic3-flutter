@@ -114,14 +114,30 @@ class Methods {
     return _invoke("save_property", {"k": key, "v": v});
   }
 
-  Future<AlbumResponse> album(int id, {bool ignoreViewLog = false}) async {
-    final cacheKey = "$id|$ignoreViewLog";
+  Future<AlbumResponse> album(
+    int id, {
+    bool ignoreViewLog = false,
+    bool includeListingDate = true,
+  }) async {
+    final cacheKey = "$id|$ignoreViewLog|$includeListingDate";
     final rsp = await _albumCache.load(
       cacheKey,
-      () => _invoke("album", {"id": id, "ignore_view_log": ignoreViewLog}),
+      () => _invoke("album", {
+        "id": id,
+        "ignore_view_log": ignoreViewLog,
+        if (!includeListingDate) "include_listing_date": false,
+      }),
       allowStaleOnError: true,
     );
     return decodeEntityResponse(rsp, "album", AlbumResponse.fromJson);
+  }
+
+  /// Optional verified webpage metadata, separate from the core album request.
+  Future<int?> albumListingDate(int id) async {
+    final value = jsonDecode(await _invoke('album_listing_date', id));
+    if (value == null) return null;
+    if (value is int && value > 0) return value;
+    throw const FormatException('Invalid album listing date');
   }
 
   Future<ChapterResponse> chapter(int id) async {

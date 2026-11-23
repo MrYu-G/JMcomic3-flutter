@@ -14,10 +14,13 @@ import 'components/comic_comments_list.dart';
 import 'components/comic_detail_chapters.dart';
 import 'components/comic_detail_header.dart';
 import 'components/comic_list.dart';
+import 'components/images.dart';
 import 'components/right_click_pop.dart';
 
 ComicBasic? effectiveComicInfoSimple(ComicBasic? simple, int comicId) {
-  if (simple == null || simple.name.trim().isEmpty) return null;
+  if (simple == null || simple.id != comicId || simple.name.trim().isEmpty) {
+    return null;
+  }
   final normalized = simple.name.trim().toUpperCase().replaceAll(
     RegExp(r'[\s#]+'),
     '',
@@ -73,10 +76,28 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
   final Set<int> _visitedTabs = {0};
   ModalRoute<void>? _route;
   late Future<AlbumResponse> _albumFuture = _loadAlbum();
+  Future<int?>? _listingDateFuture;
+  int _albumGeneration = 0;
   late Future<ViewLog?> _viewFuture = methods.findViewLog(widget.comicId);
 
-  Future<AlbumResponse> _loadAlbum() =>
-      methods.album(widget.comicId, ignoreViewLog: currentIgnoreVewLog());
+  Future<AlbumResponse> _loadAlbum() async {
+    final generation = ++_albumGeneration;
+    final comicId = widget.comicId;
+    final album = await methods.album(
+      comicId,
+      ignoreViewLog: currentIgnoreVewLog(),
+      includeListingDate: false,
+    );
+    if (mounted &&
+        widget.comicId == comicId &&
+        generation == _albumGeneration) {
+      // The optional webpage must not delay the album or reading controls.
+      _listingDateFuture = methods
+          .albumListingDate(comicId)
+          .onError((error, stack) => null);
+    }
+    return album;
+  }
 
   @override
   void didChangeDependencies() {
@@ -93,6 +114,7 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
   void didUpdateWidget(covariant ComicInfoScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.comicId != widget.comicId) {
+      _listingDateFuture = null;
       _albumFuture = _loadAlbum();
       _viewFuture = methods.findViewLog(widget.comicId);
       _tabIndex = 0;
@@ -119,6 +141,7 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
     if (_favouriteLoading) return;
     final future = _loadAlbum();
     setState(() {
+      _listingDateFuture = null;
       _albumFuture = future;
       _viewFuture = methods.findViewLog(widget.comicId);
     });
@@ -248,27 +271,30 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
                 context.l10n.tr('返回', en: 'Back'),
               ),
               actions: [
-                if (album != null) ...[
-                  _navButton(
-                    Icons.file_download_outlined,
-                    () => _download(album),
-                    context.l10n.tr('下载', en: 'Download'),
-                  ),
-                  _navButton(
-                    album.isFavorite ? Icons.bookmark : Icons.bookmark_border,
-                    _favouriteLoading ? null : () => _changeFavourite(album),
-                    context.l10n.tr('收藏', en: 'Favorites'),
-                  ),
-                  const SizedBox(width: 8),
-                ],
+                _navButton(
+                  Icons.file_download_outlined,
+                  album == null ? null : () => _download(album),
+                  context.l10n.tr('下载', en: 'Download'),
+                ),
+                _navButton(
+                  album?.isFavorite == true
+                      ? Icons.bookmark
+                      : Icons.bookmark_border,
+                  album == null || _favouriteLoading
+                      ? null
+                      : () => _changeFavourite(album),
+                  context.l10n.tr('收藏', en: 'Favorites'),
+                ),
+                const SizedBox(width: 8),
               ],
             ),
             body: album != null
                 ? _body(album)
-                : _loadingOrError(snapshot.hasError),
-            bottomNavigationBar: album != null
-                ? _bottomBar(album, background)
-                : null,
+                : _loadingOrError(
+                    snapshot.connectionState == ConnectionState.done &&
+                        snapshot.hasError,
+                  ),
+            bottomNavigationBar: _bottomBar(album, background),
           );
         },
       ),
@@ -286,23 +312,123 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
   }
 
   Widget _loadingOrError(bool error) {
-    return Center(
-      child: error
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.cloud_off_outlined, size: 32),
-                const SizedBox(height: 12),
-                Text(context.l10n.tr('漫画详情加载失败', en: 'Could not load comic')),
-                TextButton.icon(
-                  key: const ValueKey('comic-detail-retry'),
-                  onPressed: _refresh,
-                  icon: const Icon(Icons.refresh),
-                  label: Text(context.l10n.tr('重试', en: 'Retry')),
+    final simple = effectiveComicInfoSimple(widget.simple, widget.comicId);
+    final scheme = Theme.of(context).colorScheme;
+    return SingleChildScrollView(
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: _contentWidth),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact =
+                      constraints.maxWidth <= 360 ||
+                      MediaQuery.textScalerOf(context).scale(16) > 20;
+                  final coverWidth = compact ? 104.0 : 120.0;
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: JM3x4Cover(
+                            key: const Key('comic-detail-cover'),
+                            comicId: widget.comicId,
+                            width: coverWidth,
+                            height: coverWidth * 4 / 3,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 3),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  simple?.name ??
+                                      context.l10n.tr(
+                                        '漫画详情',
+                                        en: 'Comic details',
+                                      ),
+                                  key: const Key('comic-detail-title'),
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.35,
+                                    color: scheme.onSurface,
+                                  ),
+                                ),
+                                if (simple?.author.trim().isNotEmpty ==
+                                    true) ...[
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    '${context.l10n.tr('作者', en: 'Author')}: ${simple!.author}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                child: _tabs(null),
+              ),
+              Divider(height: 24, thickness: .8, color: scheme.outlineVariant),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                child: Center(
+                  child: error
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.cloud_off_outlined, size: 32),
+                            const SizedBox(height: 12),
+                            Text(
+                              context.l10n.tr(
+                                '漫画详情加载失败',
+                                en: 'Could not load comic',
+                              ),
+                            ),
+                            TextButton.icon(
+                              key: const ValueKey('comic-detail-retry'),
+                              onPressed: _refresh,
+                              icon: const Icon(Icons.refresh),
+                              label: Text(context.l10n.tr('重试', en: 'Retry')),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(strokeWidth: 2),
+                            const SizedBox(height: 12),
+                            Text(context.l10n.loading),
+                          ],
+                        ),
                 ),
-              ],
-            )
-          : const CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -322,6 +448,7 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
                 ComicDetailHeader(
                   key: ValueKey(album.id),
                   album: album,
+                  listingDateFuture: _listingDateFuture,
                   simple: effectiveComicInfoSimple(
                     widget.simple,
                     widget.comicId,
@@ -389,12 +516,12 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
     );
   }
 
-  Widget _tabs(AlbumResponse album) {
+  Widget _tabs(AlbumResponse? album) {
     final scheme = Theme.of(context).colorScheme;
     final labels = [
-      '${context.l10n.tr('章节', en: 'Chapters')} ${album.series.length}',
-      '${context.l10n.tr('评论', en: 'Comments')} ${album.commentTotal}',
-      '${context.l10n.tr('推荐', en: 'Recommended')} ${album.relatedList.length}',
+      '${context.l10n.tr('章节', en: 'Chapters')}${album == null ? '' : ' ${album.series.length}'}',
+      '${context.l10n.tr('评论', en: 'Comments')}${album == null ? '' : ' ${album.commentTotal}'}',
+      '${context.l10n.tr('推荐', en: 'Recommended')}${album == null ? '' : ' ${album.relatedList.length}'}',
     ];
     return Material(
       color: scheme.onSurface.withValues(alpha: .05),
@@ -424,10 +551,12 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
             button: true,
             child: InkWell(
               key: ValueKey('comic-detail-tab-$index'),
-              onTap: () => setState(() {
-                _tabIndex = index;
-                _visitedTabs.add(index);
-              }),
+              onTap: album == null
+                  ? null
+                  : () => setState(() {
+                      _tabIndex = index;
+                      _visitedTabs.add(index);
+                    }),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(6, 14, 6, 0),
                 child: Column(
@@ -503,7 +632,7 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
     ),
   );
 
-  Widget _bottomBar(AlbumResponse album, Color background) {
+  Widget _bottomBar(AlbumResponse? album, Color background) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -527,18 +656,20 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
                     'comic-detail-download',
                     Icons.file_download_outlined,
                     context.l10n.tr('下载', en: 'Download'),
-                    () => _download(album),
+                    album == null ? null : () => _download(album),
                   ),
                   const SizedBox(width: 4),
                   _action(
                     'comic-detail-favorite',
                     _favouriteLoading
                         ? Icons.sync
-                        : album.isFavorite
+                        : album?.isFavorite == true
                         ? Icons.bookmark
                         : Icons.bookmark_border,
                     context.l10n.tr('收藏', en: 'Favorites'),
-                    _favouriteLoading ? null : () => _changeFavourite(album),
+                    album == null || _favouriteLoading
+                        ? null
+                        : () => _changeFavourite(album),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -546,11 +677,11 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
                       future: _viewFuture,
                       builder: (context, snapshot) {
                         final ready =
+                            album != null &&
                             snapshot.connectionState == ConnectionState.done;
-                        final target = comicDetailReadingTarget(
-                          album,
-                          snapshot.data,
-                        );
+                        final target = album == null
+                            ? null
+                            : comicDetailReadingTarget(album, snapshot.data);
                         return DecoratedBox(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(28),
@@ -581,7 +712,7 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
                                     fontWeight: FontWeight.w500,
                                   ),
                             ),
-                            onPressed: ready
+                            onPressed: ready && target != null
                                 ? () => _read(
                                     album,
                                     target.chapterId,
@@ -594,7 +725,7 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
                                 Text(
                                   !ready
                                       ? context.l10n.loading
-                                      : target.continuing
+                                      : target!.continuing
                                       ? context.l10n.tr(
                                           '继续阅读',
                                           en: 'Continue reading',
@@ -605,7 +736,7 @@ class _ComicInfoScreenState extends State<ComicInfoScreen> with RouteAware {
                                         ),
                                   textAlign: TextAlign.center,
                                 ),
-                                if (ready && target.continuing)
+                                if (ready && target!.continuing)
                                   Text(
                                     'P${target.page + 1}',
                                     style: const TextStyle(

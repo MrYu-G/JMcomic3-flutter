@@ -1,12 +1,16 @@
-v1.7.44+73
+v1.7.45+74
 
-## 重要：Android 需要重新安装
+## Android 安装兼容性
 
-本版启用新的 Android 签名密钥，无法覆盖安装 v1.7.26+55 及更早版本。请先在旧版中
-导出下载或开启 WebDAV 同步备份数据，卸载旧版后再安装本版。Windows 不受影响。
+本版沿用 v1.7.43+72 的 Android 签名，可覆盖安装该版本。v1.7.26+55 及更早版本使用
+旧签名，仍需先导出下载或开启 WebDAV 同步备份数据，再卸载旧版后安装。Windows 不受影响。
 
 ## 更新内容
 
+- 漫画详情：进入后立即显示封面、已有标题、章节分页与操作区，再逐步填充内容；
+  加载失败时保留框架并可重试，等待期间仍可正常返回。
+- 加载性能：网页上架日期独立加载，章节、下载与阅读操作不再等待可选的网页查询；
+  保留已验证日期，不使用接口更新日期冒充发布日期。
 - 更新安全：只从官方 GitHub 仓库获取版本信息，拒绝错误仓库、非法版本和降级；
   安装包通过大小与 SHA-256 校验后才保存，下载可取消和重试。
 - 阅读器：图片优先使用缓存并合并重复请求，退出时清理临时图片；修复底部进度条
@@ -23,11 +27,11 @@ v1.7.44+73
 
 ## 下载
 
-- Android ARM64：`Jmcomic3-arm64-v8a-v1.7.43+72.apk`，适用于大多数手机。
-- Android ARM32：`Jmcomic3-armeabi-v7a-v1.7.43+72.apk`，适用于 32 位设备。
-- Android 通用包：`Jmcomic3-universal-v1.7.43+72.apk`，同时包含以上两种架构，
+- Android ARM64：`Jmcomic3-arm64-v8a-v1.7.45+74.apk`，适用于大多数手机。
+- Android ARM32：`Jmcomic3-armeabi-v7a-v1.7.45+74.apk`，适用于 32 位设备。
+- Android 通用包：`Jmcomic3-universal-v1.7.45+74.apk`，同时包含以上两种架构，
   体积更大，不确定架构时使用。
-- Windows x64：`Jmcomic3-windows-x64-v1.7.43+72.zip`，完整解压后运行 jmcomic3.exe。
+- Windows x64：`Jmcomic3-windows-x64-v1.7.45+74.zip`，完整解压后运行 jmcomic3.exe。
 - SHA256SUMS.txt 用于校验附件；build-info.json 记录源码、工具链和验证结果。
 
 Windows 可执行文件未做代码签名。
